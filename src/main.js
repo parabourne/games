@@ -11,7 +11,8 @@ import {
   parseKey,
 } from './world.js';
 import { animals, updateAnimals, damageAnimal } from './animals.js';
-import { addToInventory } from './inventory.js';
+import { addToInventory, removeFromInventory } from './inventory.js';
+import './craft.js'; // craft panelinin özü DOM listener-lərini burada qurur
 
 // ---------- TOUCH CİHAZ TƏYİNİ ----------
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -273,6 +274,12 @@ function doAction(actionType) {
     removeBlockByKey(k);
   } else if (actionType === 'place') {
     const normal = hit.face.normal;
+    // Yataq craft edilmiş item olduğu üçün, qoymazdan əvvəl inventarda
+    // olub-olmadığını yoxlayırıq; digər bloklar (grass/dirt/stone/wood/sand)
+    // əvvəlki kimi limitsizdir.
+    if (currentType === 'bed') {
+      if (!removeFromInventory('bed', 1)) return;
+    }
     addBlock(bx + normal.x, by + normal.y, bz + normal.z, currentType);
   }
 }

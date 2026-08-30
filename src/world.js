@@ -32,6 +32,9 @@ const materials = {
   stone: new THREE.MeshLambertMaterial({ color: 0x888888 }),
   wood: new THREE.MeshLambertMaterial({ color: 0x6b4423 }),
   sand: new THREE.MeshLambertMaterial({ color: 0xe6d28a }),
+  // Craft edilən yataq — sadəlik üçün tək-blok rəngli kub kimi göstərilir
+  // (əsl Minecraft-dakı 2-hissəli yataq modeli deyil)
+  bed: new THREE.MeshLambertMaterial({ color: 0xd9534f }),
 };
 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -46,6 +49,7 @@ const capacities = {
   stone: SIZE * SIZE + 500,
   wood: 2000,
   sand: 2000,
+  bed: 200,
 };
 
 export const instancedMeshes = {};

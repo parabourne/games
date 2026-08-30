@@ -7,6 +7,8 @@ const ICONS = {
   meat: '🥩',
   wool: '🧶',
   leather: '🟫',
+  cooked_meat: '🍖',
+  bed: '🛏️',
 };
 
 function listEl() {
