@@ -62,6 +62,18 @@ for (const type of Object.keys(materials)) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.userData.blockType = type;
+
+  // ---- BUG FIX: frustum culling ----
+  // InstancedMesh-in default bounding sphere-i yalnız geometriyanın öz
+  // (kiçik, mərkəzdəki) radiusunu əhatə edir — bütün instansların əhatə
+  // etdiyi sahəni YOX. Nəticədə kamera müəyyən bucaqda olanda Three.js
+  // bütün mesh-i (yəni bütün həmin tipdəki blokları) səhvən "görüş
+  // sahəsindən kənarda" hesab edib render etmirdi — "blok bəzən
+  // görünmür" bug-ının əsl səbəbi budur.
+  // Dünya nisbətən kiçik olduğu üçün ən sadə və etibarlı həll: bu
+  // mesh üçün frustum culling-i tamamilə deaktiv etmək.
+  mesh.frustumCulled = false;
+
   scene.add(mesh);
   instancedMeshes[type] = mesh;
   freeList[type] = [];

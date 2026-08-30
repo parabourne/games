@@ -10,7 +10,8 @@ import {
   removeBlockByKey,
   parseKey,
 } from './world.js';
-import { updateAnimals } from './animals.js';
+import { animals, updateAnimals, damageAnimal } from './animals.js';
+import { addToInventory } from './inventory.js';
 
 // ---------- TOUCH CİHAZ TƏYİNİ ----------
 const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -221,18 +222,46 @@ function updateMovement(dt) {
   camera.rotation.x = pitch;
 }
 
-// ---------- BLOK SINDIRMA / QOYMA ----------
+// ---------- BLOK SINDIRMA / QOYMA + HEYVANA VURMA ----------
 const raycaster = new THREE.Raycaster();
 raycaster.far = 8;
 const center = new THREE.Vector2(0, 0);
 
+// Raycast bir heyvanın alt-mesh-inə (body/head/leg) dəysə, qrupun özünə
+// qədər yuxarı çıxıb userData.isAnimal işarəsini axtarırıq.
+function findAnimalRoot(obj) {
+  let o = obj;
+  while (o) {
+    if (o.userData && o.userData.isAnimal) return o;
+    o = o.parent;
+  }
+  return null;
+}
+
 function doAction(actionType) {
   raycaster.setFromCamera(center, camera);
-  const meshList = Object.values(instancedMeshes);
-  const intersects = raycaster.intersectObjects(meshList);
+
+  const blockMeshList = Object.values(instancedMeshes);
+  const animalMeshList = animals.map((a) => a.mesh);
+  const intersects = raycaster.intersectObjects([...blockMeshList, ...animalMeshList], true);
   if (intersects.length === 0) return;
 
   const hit = intersects[0];
+
+  // ---- Heyvana vurma ----
+  const animalRoot = findAnimalRoot(hit.object);
+  if (animalRoot) {
+    if (actionType === 'break') {
+      const record = animalRoot.userData.animalRef;
+      const drops = damageAnimal(record, 1);
+      if (drops) {
+        for (const d of drops) addToInventory(d.item, d.count);
+      }
+    }
+    return; // heyvana dəyibsə, blok məntiqinə keçmirik
+  }
+
+  // ---- Blok sındırma / qoyma ----
   if (hit.instanceId === undefined || hit.instanceId === null) return;
 
   const blockType = hit.object.userData.blockType;

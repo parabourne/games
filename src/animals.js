@@ -68,21 +68,83 @@ function createCow() {
   return group;
 }
 
+// ---------- YENİ: QOYUN ----------
+function createSheep() {
+  const group = new THREE.Group();
+  const woolMat = new THREE.MeshLambertMaterial({ color: 0xf5f5f0 });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.55, 0.5), woolMat);
+  body.position.y = 0.5;
+  body.castShadow = true;
+  group.add(body);
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), darkMat);
+  head.position.set(0.55, 0.55, 0);
+  head.castShadow = true;
+  group.add(head);
+
+  const legGeo = new THREE.BoxGeometry(0.13, 0.3, 0.13);
+  const legPositions = [
+    [0.28, 0.15, 0.18], [0.28, 0.15, -0.18],
+    [-0.28, 0.15, 0.18], [-0.28, 0.15, -0.18],
+  ];
+  legPositions.forEach((p) => {
+    const leg = new THREE.Mesh(legGeo, darkMat);
+    leg.position.set(...p);
+    group.add(leg);
+  });
+
+  return group;
+}
+
+const BUILDERS = { pig: createPig, cow: createCow, sheep: createSheep };
+
+// ---------- CAN VƏ DROP CƏDVƏLİ ----------
+const HEALTH = { pig: 3, cow: 4, sheep: 2 };
+
+// hər item üçün { item, min, max } - ölüncə bu aralıqda təsadüfi say düşür
+const DROPS = {
+  pig: [{ item: 'meat', min: 1, max: 2 }],
+  cow: [
+    { item: 'meat', min: 1, max: 3 },
+    { item: 'leather', min: 0, max: 1 },
+  ],
+  sheep: [{ item: 'wool', min: 1, max: 2 }],
+};
+
+function rollDrops(type) {
+  const table = DROPS[type] || [];
+  const drops = [];
+  for (const d of table) {
+    const count = Math.floor(Math.random() * (d.max - d.min + 1)) + d.min;
+    if (count > 0) drops.push({ item: d.item, count });
+  }
+  return drops;
+}
+
 export const animals = [];
 
 function spawnAnimal(type, x, z) {
-  const mesh = type === 'pig' ? createPig() : createCow();
+  const builder = BUILDERS[type] || createPig;
+  const mesh = builder();
   mesh.position.set(x, GROUND_TOP, z);
   mesh.rotation.y = Math.random() * Math.PI * 2;
+  mesh.userData.isAnimal = true;
   scene.add(mesh);
 
-  animals.push({
+  const record = {
     mesh,
     type,
+    health: HEALTH[type] ?? 3,
     state: 'idle',
     stateTimer: Math.random() * 2,
     walkAngle: Math.random() * Math.PI * 2,
-  });
+  };
+  // Raycast heyvana dəyəndə mesh-dən birbaşa record-a çatmaq üçün:
+  mesh.userData.animalRef = record;
+
+  animals.push(record);
 }
 
 for (let i = 0; i < 12; i++) {
@@ -94,6 +156,11 @@ for (let i = 0; i < 10; i++) {
   const x = (Math.random() - 0.5) * (SIZE - 4);
   const z = (Math.random() - 0.5) * (SIZE - 4);
   spawnAnimal('cow', x, z);
+}
+for (let i = 0; i < 10; i++) {
+  const x = (Math.random() - 0.5) * (SIZE - 4);
+  const z = (Math.random() - 0.5) * (SIZE - 4);
+  spawnAnimal('sheep', x, z);
 }
 
 const ANIMAL_SPEED = 1.2;
@@ -130,4 +197,18 @@ export function updateAnimals(dt) {
 
     a.mesh.position.y = GROUND_TOP;
   }
+}
+
+// ---------- YENİ: HEYVANA ZƏRBƏ ----------
+// record: animals[] içindəki obyekt, amount: neçə can azalsın
+// Qayıdış: heyvan ölübsə drop siyahısı ([{item, count}]), yox əgər sağdırsa null
+export function damageAnimal(record, amount = 1) {
+  record.health -= amount;
+  if (record.health > 0) return null;
+
+  scene.remove(record.mesh);
+  const idx = animals.indexOf(record);
+  if (idx !== -1) animals.splice(idx, 1);
+
+  return rollDrops(record.type);
 }
