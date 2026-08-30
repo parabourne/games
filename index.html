@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>minecraft-clone</title>
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+      * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #000; touch-action: none; }
       #app { width: 100%; height: 100%; }
       #crosshair {
         position: fixed; top: 50%; left: 50%;
@@ -37,12 +37,79 @@
         cursor: pointer;
       }
       .slot.active { border-color: white; background: rgba(255,255,255,0.2); }
+
+      /* ---- TOXUNMA İDARƏETMƏ (yalnız touch cihazlarda görünür) ---- */
+      #touch-controls { display: none; }
+      body.touch-device #touch-controls { display: block; }
+      body.touch-device #info { display: none; }
+
+      #joystick-zone {
+        position: fixed; bottom: 30px; left: 30px;
+        width: 130px; height: 130px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.15);
+        border: 2px solid rgba(255,255,255,0.3);
+        z-index: 20;
+        touch-action: none;
+      }
+      #joystick-knob {
+        position: absolute; top: 50%; left: 50%;
+        width: 55px; height: 55px;
+        margin: -27px 0 0 -27px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.4);
+        border: 2px solid rgba(255,255,255,0.6);
+        pointer-events: none;
+      }
+      #look-zone {
+        position: fixed; top: 0; right: 0;
+        width: 55%; height: 100%;
+        z-index: 15;
+        touch-action: none;
+      }
+      #action-buttons {
+        position: fixed; bottom: 100px; right: 25px;
+        display: flex; flex-direction: column; gap: 14px;
+        z-index: 20;
+      }
+      .action-btn {
+        width: 64px; height: 64px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.5);
+        border: 2px solid rgba(255,255,255,0.4);
+        color: white;
+        font-size: 12px;
+        font-family: sans-serif;
+        display: flex; align-items: center; justify-content: center;
+        text-align: center;
+        touch-action: none;
+      }
+      #jump-btn {
+        position: fixed; bottom: 30px; left: 190px;
+        width: 64px; height: 64px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.5);
+        border: 2px solid rgba(255,255,255,0.4);
+        color: white;
+        font-size: 12px;
+        font-family: sans-serif;
+        display: flex; align-items: center; justify-content: center;
+        z-index: 20;
+        touch-action: none;
+      }
+      #touch-hint {
+        position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+        color: white; font-family: sans-serif; font-size: 12px;
+        background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 6px;
+        z-index: 10;
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div id="crosshair"></div>
     <div id="info">WASD - hərəkət | Space - tullanmaq | Sol klik - blok sındır | Sağ klik - blok qoy | Təkər - zoom | 1-5 - blok seç</div>
+
     <div id="hotbar">
       <div class="slot active" data-type="grass">🟩</div>
       <div class="slot" data-type="dirt">🟫</div>
@@ -50,6 +117,20 @@
       <div class="slot" data-type="wood">🪵</div>
       <div class="slot" data-type="sand">🟨</div>
     </div>
+
+    <div id="touch-controls">
+      <div id="touch-hint">Sol tərəf – bax | Sağ tərəf – bax/fırlat | Düymələr – sındır/qoy/tulan</div>
+      <div id="look-zone"></div>
+      <div id="joystick-zone">
+        <div id="joystick-knob"></div>
+      </div>
+      <div id="jump-btn">Tullan</div>
+      <div id="action-buttons">
+        <div class="action-btn" id="break-btn">Sındır</div>
+        <div class="action-btn" id="place-btn">Qoy</div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

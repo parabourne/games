@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 
+// ---------- TOUCH CİHAZ TƏYİNİ ----------
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+if (isTouchDevice) document.body.classList.add('touch-device');
+
 // ---------- SƏHNƏ ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
@@ -87,34 +91,140 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// ---------- POINTER LOCK ----------
+// ---------- POINTER LOCK (yalnız masaüstü) ----------
 let yaw = 0, pitch = 0;
 const PI_2 = Math.PI / 2;
 
-renderer.domElement.addEventListener('click', () => {
-  renderer.domElement.requestPointerLock();
-});
+if (!isTouchDevice) {
+  renderer.domElement.addEventListener('click', () => {
+    renderer.domElement.requestPointerLock();
+  });
 
-document.addEventListener('mousemove', (e) => {
-  if (document.pointerLockElement !== renderer.domElement) return;
-  yaw -= e.movementX * 0.002;
-  pitch -= e.movementY * 0.002;
-  pitch = Math.max(-PI_2, Math.min(PI_2, pitch));
-});
+  document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement !== renderer.domElement) return;
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-PI_2, Math.min(PI_2, pitch));
+  });
 
-// ---------- ZOOM (siçan təkəri) ----------
-document.addEventListener('wheel', (e) => {
-  if (document.pointerLockElement !== renderer.domElement) return;
-  camera.fov += e.deltaY * 0.02;
-  camera.fov = Math.max(20, Math.min(DEFAULT_FOV, camera.fov));
-  camera.updateProjectionMatrix();
-});
+  document.addEventListener('wheel', (e) => {
+    if (document.pointerLockElement !== renderer.domElement) return;
+    camera.fov += e.deltaY * 0.02;
+    camera.fov = Math.max(20, Math.min(DEFAULT_FOV, camera.fov));
+    camera.updateProjectionMatrix();
+  });
+}
 
-// ---------- HƏRƏKƏT ----------
+// ---------- HƏRƏKƏT (klaviatura) ----------
 const keys = {};
 document.addEventListener('keydown', (e) => (keys[e.code] = true));
 document.addEventListener('keyup', (e) => (keys[e.code] = false));
 
+// ---------- TOXUNMA İDARƏETMƏ ----------
+const touchMove = { x: 0, y: 0 }; // joystick vektoru (-1..1)
+let touchJump = false;
+
+if (isTouchDevice) {
+  // --- JOYSTICK ---
+  const joystickZone = document.getElementById('joystick-zone');
+  const joystickKnob = document.getElementById('joystick-knob');
+  let joyTouchId = null;
+  const JOY_RADIUS = 55;
+
+  joystickZone.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    joyTouchId = t.identifier;
+    e.preventDefault();
+  }, { passive: false });
+
+  joystickZone.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joyTouchId) continue;
+      const rect = joystickZone.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = t.clientX - cx;
+      let dy = t.clientY - cy;
+      const dist = Math.min(Math.hypot(dx, dy), JOY_RADIUS);
+      const angle = Math.atan2(dy, dx);
+      dx = Math.cos(angle) * dist;
+      dy = Math.sin(angle) * dist;
+      joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+      touchMove.x = dx / JOY_RADIUS;
+      touchMove.y = dy / JOY_RADIUS;
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  function resetJoystick(e) {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joyTouchId) continue;
+      joyTouchId = null;
+      touchMove.x = 0;
+      touchMove.y = 0;
+      joystickKnob.style.transform = `translate(0px, 0px)`;
+    }
+  }
+  joystickZone.addEventListener('touchend', resetJoystick);
+  joystickZone.addEventListener('touchcancel', resetJoystick);
+
+  // --- LOOK ZONE (ekranı sürüşdürərək baxış) ---
+  const lookZone = document.getElementById('look-zone');
+  let lookTouchId = null;
+  let lastX = 0, lastY = 0;
+
+  lookZone.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    lookTouchId = t.identifier;
+    lastX = t.clientX;
+    lastY = t.clientY;
+    e.preventDefault();
+  }, { passive: false });
+
+  lookZone.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookTouchId) continue;
+      const dx = t.clientX - lastX;
+      const dy = t.clientY - lastY;
+      lastX = t.clientX;
+      lastY = t.clientY;
+      yaw -= dx * 0.004;
+      pitch -= dy * 0.004;
+      pitch = Math.max(-PI_2, Math.min(PI_2, pitch));
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  lookZone.addEventListener('touchend', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === lookTouchId) lookTouchId = null;
+    }
+  });
+
+  // --- TULLANMA DÜYMƏSİ ---
+  const jumpBtn = document.getElementById('jump-btn');
+  jumpBtn.addEventListener('touchstart', (e) => {
+    touchJump = true;
+    e.preventDefault();
+  }, { passive: false });
+  jumpBtn.addEventListener('touchend', (e) => {
+    touchJump = false;
+    e.preventDefault();
+  }, { passive: false });
+
+  // --- SINDIRMA / QOYMA DÜYMƏLƏRİ ---
+  document.getElementById('break-btn').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    doAction('break');
+  }, { passive: false });
+
+  document.getElementById('place-btn').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    doAction('place');
+  }, { passive: false });
+}
+
+// ---------- HƏRƏKƏT HESABLAMASI ----------
 const velocity = new THREE.Vector3();
 let canJump = false;
 const GRAVITY = -20;
@@ -126,17 +236,28 @@ function updateMovement(dt) {
   const right = new THREE.Vector3(Math.sin(yaw + PI_2), 0, Math.cos(yaw + PI_2));
 
   const move = new THREE.Vector3();
+
   if (keys['KeyW']) move.sub(forward);
   if (keys['KeyS']) move.add(forward);
   if (keys['KeyA']) move.sub(right);
   if (keys['KeyD']) move.add(right);
-  if (move.lengthSq() > 0) move.normalize().multiplyScalar(MOVE_SPEED);
+
+  // touch joystick
+  if (touchMove.x !== 0 || touchMove.y !== 0) {
+    move.add(forward.clone().multiplyScalar(touchMove.y));
+    move.add(right.clone().multiplyScalar(touchMove.x));
+  }
+
+  if (move.lengthSq() > 0) {
+    if (move.length() > 1) move.normalize();
+    move.multiplyScalar(MOVE_SPEED);
+  }
 
   velocity.x = move.x;
   velocity.z = move.z;
   velocity.y += GRAVITY * dt;
 
-  if (keys['Space'] && canJump) {
+  if ((keys['Space'] || touchJump) && canJump) {
     velocity.y = JUMP_SPEED;
     canJump = false;
   }
@@ -162,25 +283,31 @@ const raycaster = new THREE.Raycaster();
 raycaster.far = 8;
 const center = new THREE.Vector2(0, 0);
 
-renderer.domElement.addEventListener('mousedown', (e) => {
-  if (document.pointerLockElement !== renderer.domElement) return;
-
+function doAction(type) {
   raycaster.setFromCamera(center, camera);
   const intersects = raycaster.intersectObjects([...blocks.values()]);
   if (intersects.length === 0) return;
 
   const hit = intersects[0];
 
-  if (e.button === 0) {
+  if (type === 'break') {
     removeBlock(hit.object);
-  } else if (e.button === 2) {
+  } else if (type === 'place') {
     const normal = hit.face.normal;
     const pos = hit.object.position.clone().add(normal);
     addBlock(pos.x, pos.y, pos.z, currentType);
   }
-});
+}
 
-renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+// masaüstü siçan
+if (!isTouchDevice) {
+  renderer.domElement.addEventListener('mousedown', (e) => {
+    if (document.pointerLockElement !== renderer.domElement) return;
+    if (e.button === 0) doAction('break');
+    else if (e.button === 2) doAction('place');
+  });
+  renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+}
 
 // ---------- PƏNCƏRƏ ÖLÇÜSÜ ----------
 window.addEventListener('resize', () => {
