@@ -78,6 +78,11 @@ let currentType = 'grass';
 const slots = document.querySelectorAll('.slot');
 slots.forEach((slot) => {
   slot.addEventListener('click', () => selectSlot(slot));
+  slot.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    selectSlot(slot);
+  }, { passive: false });
 });
 function selectSlot(slot) {
   slots.forEach((s) => s.classList.remove('active'));
@@ -121,7 +126,7 @@ document.addEventListener('keydown', (e) => (keys[e.code] = true));
 document.addEventListener('keyup', (e) => (keys[e.code] = false));
 
 // ---------- TOXUNMA İDARƏETMƏ ----------
-const touchMove = { x: 0, y: 0 }; // joystick vektoru (-1..1)
+const touchMove = { x: 0, y: 0 };
 let touchJump = false;
 
 if (isTouchDevice) {
@@ -242,7 +247,6 @@ function updateMovement(dt) {
   if (keys['KeyA']) move.sub(right);
   if (keys['KeyD']) move.add(right);
 
-  // touch joystick
   if (touchMove.x !== 0 || touchMove.y !== 0) {
     move.add(forward.clone().multiplyScalar(touchMove.y));
     move.add(right.clone().multiplyScalar(touchMove.x));
@@ -299,7 +303,6 @@ function doAction(type) {
   }
 }
 
-// masaüstü siçan
 if (!isTouchDevice) {
   renderer.domElement.addEventListener('mousedown', (e) => {
     if (document.pointerLockElement !== renderer.domElement) return;
