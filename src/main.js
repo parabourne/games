@@ -263,6 +263,18 @@ const raycaster = new THREE.Raycaster();
 raycaster.far = 8;
 const center = new THREE.Vector2(0, 0);
 
+// Hər blok növü sındırılanda inventara nə düşdüyünü göstərir.
+// Xəritədə olmayan blok növü (məs. gələcəkdə əlavə olunan yeni bir tip)
+// sındırılanda heç nə düşmür — yeni blok əlavə etsən, bura da bir sətir yaz.
+const BLOCK_DROPS = {
+  wood: 'wood',
+  stone: 'stone',
+  coal_ore: 'coal',
+  grass: 'dirt', // əsl Minecraft-da olduğu kimi, ot bloku torpaq buraxır
+  dirt: 'dirt',
+  sand: 'sand',
+};
+
 // Raycast bir heyvanın alt-mesh-inə (body/head/leg) dəysə, qrupun özünə
 // qədər yuxarı çıxıb userData.isAnimal işarəsini axtarırıq.
 function findAnimalRoot(obj) {
@@ -307,6 +319,9 @@ function doAction(actionType) {
 
   if (actionType === 'break') {
     removeBlockByKey(k);
+    // Blok sındırılanda müvafiq resursu inventara əlavə et
+    const dropItem = BLOCK_DROPS[blockType];
+    if (dropItem) addToInventory(dropItem, 1);
   } else if (actionType === 'place') {
     const normal = hit.face.normal;
     // Yataq craft edilmiş item olduğu üçün, qoymazdan əvvəl inventarda

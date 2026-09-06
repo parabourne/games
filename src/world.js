@@ -54,6 +54,10 @@ const materials = {
   grass: grassMaterials,
   dirt: new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
   stone: new THREE.MeshLambertMaterial({ color: 0x888888 }),
+  // YENİ: Kömür filizi — bazası daşla eyni boz rəng, üzərində qara
+  // "ləkələr" hissi vermək üçün daha tünd, demək olar qara çalar seçilib.
+  // Sadəlik üçün tək materialdan istifadə olunur (grass kimi çoxüzlü deyil).
+  coal_ore: new THREE.MeshLambertMaterial({ color: 0x333333 }),
   wood: new THREE.MeshLambertMaterial({ color: 0x6b4423 }),
   sand: new THREE.MeshLambertMaterial({ color: 0xe6d28a }),
   // Craft edilən yataq — indi yastı çarpayı həndəsəsi ilə göstərilir
@@ -73,6 +77,7 @@ const capacities = {
   grass: SIZE * SIZE + 1500,
   dirt: SIZE * SIZE + 500,
   stone: SIZE * SIZE + 500,
+  coal_ore: 500,
   wood: 2000,
   sand: 2000,
   bed: 200,
@@ -157,11 +162,16 @@ export function removeBlockByKey(k) {
 }
 
 // ---------- YER (torpaq) YARAT ----------
+// Kömür filizinin daş laylarında nə qədər tez-tez çıxacağını təyin edir
+// (0.08 = hər stone blokunun ~8%-i əvəzinə kömür qoyulur).
+const COAL_CHANCE = 0.08;
+
 for (let x = -SIZE / 2; x < SIZE / 2; x++) {
   for (let z = -SIZE / 2; z < SIZE / 2; z++) {
     addBlock(x, 0, z, 'grass');
     addBlock(x, -1, z, 'dirt');
-    addBlock(x, -2, z, 'stone');
+    const stoneType = Math.random() < COAL_CHANCE ? 'coal_ore' : 'stone';
+    addBlock(x, -2, z, stoneType);
   }
 }
 export const GROUND_TOP = 0.5;
