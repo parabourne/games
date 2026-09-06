@@ -15,7 +15,10 @@ renderer.shadowMap.enabled = true;
 document.getElementById('app').appendChild(renderer.domElement);
 
 // ---------- İŞIQ ----------
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+// YENİ: ambient işıq artıq dəyişkəndə saxlanılır ki, gecə-gündüz dövründə
+// intensivliyini dəyişə bilək (gecə daha qaranlıq olsun deyə).
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.8);
 sun.position.set(30, 40, 15);
 sun.castShadow = true;
@@ -187,6 +190,70 @@ const water = new THREE.Mesh(waterGeo, waterMat);
 water.rotation.x = -Math.PI / 2;
 water.position.y = 0.05; // grass səthindən (0.5) bir az aşağı - ada altında görünmür
 scene.add(water);
+
+// ---------- GECƏ-GÜNDÜZ DÖVRÜ ----------
+// Tam bir dövr (gündüz + gecə) neçə saniyə çəkir. İstəsən sürətləndirmək/
+// yavaşlatmaq üçün sadəcə bu ədədi dəyiş.
+export const DAY_LENGTH = 180;
+// Dövrün nə qədəri gündüz olsun (0.7 = 70% gündüz, 30% gecə)
+const DAY_FRACTION = 0.7;
+// Gündüz/gecə arasında keçidin nə qədər yumşaq olacağı (dövrün faizi kimi)
+const TRANSITION = 0.05;
+
+// Sübh vaxtından başlasın deyə dövrün kiçik bir hissəsindən başlayırıq
+export let dayTime = DAY_LENGTH * 0.05;
+let _isNight = false;
+
+const DAY_SKY = new THREE.Color(0x87ceeb);
+const NIGHT_SKY = new THREE.Color(0x0b1026);
+const DAY_FOG_NEAR = 40, DAY_FOG_FAR = 130;
+const NIGHT_FOG_NEAR = 12, NIGHT_FOG_FAR = 45;
+const _mixColor = new THREE.Color();
+
+export function isNight() {
+  return _isNight;
+}
+
+// Yataqda yatanda çağırılır — vaxtı birbaşa sübhə keçirir
+export function skipToMorning() {
+  dayTime = DAY_LENGTH * 0.05;
+  applyDayNightVisuals();
+  _isNight = false;
+}
+
+function applyDayNightVisuals() {
+  const t = dayTime / DAY_LENGTH; // 0..1
+
+  // mix: 0 = tam gündüz görünüşü, 1 = tam gecə görünüşü
+  let mix;
+  if (t < DAY_FRACTION - TRANSITION) {
+    mix = 0;
+  } else if (t < DAY_FRACTION + TRANSITION) {
+    mix = (t - (DAY_FRACTION - TRANSITION)) / (TRANSITION * 2);
+  } else if (t < 1 - TRANSITION) {
+    mix = 1;
+  } else {
+    mix = 1 - (t - (1 - TRANSITION)) / TRANSITION;
+  }
+  mix = Math.max(0, Math.min(1, mix));
+
+  _mixColor.copy(DAY_SKY).lerp(NIGHT_SKY, mix);
+  scene.background = _mixColor.clone();
+  scene.fog.color = _mixColor;
+  scene.fog.near = DAY_FOG_NEAR + (NIGHT_FOG_NEAR - DAY_FOG_NEAR) * mix;
+  scene.fog.far = DAY_FOG_FAR + (NIGHT_FOG_FAR - DAY_FOG_FAR) * mix;
+
+  sun.intensity = 0.8 - 0.65 * mix;
+  ambientLight.intensity = 0.6 - 0.45 * mix;
+}
+
+// Hər frame-də main.js tərəfindən çağırılmalıdır
+export function updateDayNightCycle(dt) {
+  dayTime = (dayTime + dt) % DAY_LENGTH;
+  const t = dayTime / DAY_LENGTH;
+  _isNight = t > DAY_FRACTION;
+  applyDayNightVisuals();
+}
 
 // ---------- PƏNCƏRƏ ÖLÇÜSÜ ----------
 window.addEventListener('resize', () => {

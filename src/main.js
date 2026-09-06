@@ -9,8 +9,20 @@ import {
   addBlock,
   removeBlockByKey,
   parseKey,
+  blocks,
+  key,
+  updateDayNightCycle,
+  isNight,
+  skipToMorning,
 } from './world.js';
 import { animals, updateAnimals, damageAnimal } from './animals.js';
+import {
+  zombies,
+  spawnNightZombies,
+  despawnAllZombies,
+  damageZombie,
+  updateZombies,
+} from './zombies.js';
 import { addToInventory, removeFromInventory } from './inventory.js';
 import { resolveMovement, isOnGround, EYE_HEIGHT } from './collision.js';
 import './craft.js'; // craft panelinin özü DOM listener-lərini burada qurur
@@ -48,7 +60,7 @@ const PI_2 = Math.PI / 2;
 
 if (!isTouchDevice) {
   renderer.domElement.addEventListener('click', () => {
-    renderer.domElement.requestPointerLock();
+    if (!gameOver) renderer.domElement.requestPointerLock();
   });
 
   document.addEventListener('mousemove', (e) => {
@@ -169,6 +181,15 @@ if (isTouchDevice) {
     e.preventDefault();
     doAction('place');
   }, { passive: false });
+
+  // Planşetdə yatmaq üçün toxunma düyməsi (əgər HTML-də varsa)
+  const sleepBtn = document.getElementById('sleep-btn');
+  if (sleepBtn) {
+    sleepBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      attemptSleep();
+    }, { passive: false });
+  }
 }
 
 // ---------- HƏRƏKƏT HESABLAMASI ----------
@@ -258,7 +279,7 @@ function updateMovement(dt) {
   camera.rotation.x = pitch;
 }
 
-// ---------- BLOK SINDIRMA / QOYMA + HEYVANA VURMA ----------
+// ---------- BLOK SINDIRMA / QOYMA + HEYVANA/ZOMBİYƏ VURMA ----------
 const raycaster = new THREE.Raycaster();
 raycaster.far = 8;
 const center = new THREE.Vector2(0, 0);
@@ -286,12 +307,27 @@ function findAnimalRoot(obj) {
   return null;
 }
 
+// Eyni məntiq, zombi qrupu üçün.
+function findZombieRoot(obj) {
+  let o = obj;
+  while (o) {
+    if (o.userData && o.userData.isZombie) return o;
+    o = o.parent;
+  }
+  return null;
+}
+
 function doAction(actionType) {
+  if (gameOver) return;
   raycaster.setFromCamera(center, camera);
 
   const blockMeshList = Object.values(instancedMeshes);
   const animalMeshList = animals.map((a) => a.mesh);
-  const intersects = raycaster.intersectObjects([...blockMeshList, ...animalMeshList], true);
+  const zombieMeshList = zombies.map((z) => z.mesh);
+  const intersects = raycaster.intersectObjects(
+    [...blockMeshList, ...animalMeshList, ...zombieMeshList],
+    true
+  );
   if (intersects.length === 0) return;
 
   const hit = intersects[0];
@@ -307,6 +343,16 @@ function doAction(actionType) {
       }
     }
     return; // heyvana dəyibsə, blok məntiqinə keçmirik
+  }
+
+  // ---- Zombiyə vurma ----
+  const zombieRoot = findZombieRoot(hit.object);
+  if (zombieRoot) {
+    if (actionType === 'break') {
+      const record = zombieRoot.userData.zombieRef;
+      damageZombie(record, 1);
+    }
+    return; // zombiyə dəyibsə, blok məntiqinə keçmirik
   }
 
   // ---- Blok sındırma / qoyma ----
@@ -343,13 +389,146 @@ if (!isTouchDevice) {
   renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
+// ---------- GİZLƏNMƏ (BAĞLI SAHƏ) YOXLAMASI ----------
+// Sadə həndəsi yoxlama: oyunçunun 4 üfüqi tərəfindən (ayaq VƏ ya baş
+// səviyyəsində) divar olmalı, üstündə isə 3 blok məsafədə bir tavan
+// olmalıdır. Bu, tam qapalı kiçik bir daxma/otaq daxilində olmaq deməkdir.
+function isPlayerSheltered(feet) {
+  const fx = Math.round(feet.x);
+  const fy = Math.round(feet.y);
+  const fz = Math.round(feet.z);
+
+  const hasBlock = (x, y, z) => blocks.has(key(x, y, z));
+
+  let hasRoof = false;
+  for (let dy = 1; dy <= 3; dy++) {
+    if (hasBlock(fx, fy + dy, fz)) {
+      hasRoof = true;
+      break;
+    }
+  }
+  if (!hasRoof) return false;
+
+  const dirs = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+  ];
+  for (const [dx, dz] of dirs) {
+    const wallFeet = hasBlock(fx + dx, fy, fz + dz);
+    const wallHead = hasBlock(fx + dx, fy + 1, fz + dz);
+    if (!wallFeet && !wallHead) return false; // bu tərəf açıqdır
+  }
+  return true;
+}
+
+// ---------- YATAQ YAXINLIĞI ----------
+function isNearBed(feet, radius = 3) {
+  for (const [k, info] of blocks) {
+    if (info.type !== 'bed') continue;
+    const [bx, by, bz] = parseKey(k);
+    const dist = Math.hypot(bx - feet.x, by - feet.y, bz - feet.z);
+    if (dist <= radius) return true;
+  }
+  return false;
+}
+
+// ---------- MÜVƏQQƏTİ İPUCU MESAJI ----------
+let hintTimeout = null;
+function showHint(text) {
+  const el = document.getElementById('hint');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('hidden');
+  clearTimeout(hintTimeout);
+  hintTimeout = setTimeout(() => el.classList.add('hidden'), 2500);
+}
+
+function attemptSleep() {
+  if (gameOver) return;
+  if (!isNight()) {
+    showHint('Yatmaq üçün gecəni gözlə 🌙');
+    return;
+  }
+  const feet = {
+    x: camera.position.x,
+    y: camera.position.y - EYE_HEIGHT,
+    z: camera.position.z,
+  };
+  if (!isNearBed(feet)) {
+    showHint('Yatmaq üçün yaxınlıqda yataq olmalıdır 🛏️');
+    return;
+  }
+  skipToMorning();
+  despawnAllZombies();
+  wasNight = false;
+  showHint('Gündüz oldu ☀️');
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyB') attemptSleep();
+});
+
+// ---------- GÜNDÜZ/GECƏ GÖSTƏRİCİSİ ----------
+function updateDayNightIndicator(nightNow) {
+  const el = document.getElementById('daynight-indicator');
+  if (!el) return;
+  el.textContent = nightNow ? '🌙 Gecə' : '☀️ Gündüz';
+}
+
+// ---------- GAME OVER ----------
+let gameOver = false;
+
+function triggerGameOver() {
+  if (gameOver) return;
+  gameOver = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+  const screen = document.getElementById('game-over-screen');
+  if (screen) screen.classList.remove('hidden');
+}
+
+const restartBtn = document.getElementById('restart-btn');
+if (restartBtn) {
+  restartBtn.addEventListener('click', () => {
+    location.reload();
+  });
+}
+
 // ---------- ANİMASİYA DÖNGÜSÜ ----------
+let wasNight = false;
 const clock = new THREE.Clock();
+
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
-  updateMovement(dt);
-  updateAnimals(dt);
+
+  if (!gameOver) {
+    updateMovement(dt);
+    updateAnimals(dt);
+    updateDayNightCycle(dt);
+
+    const nightNow = isNight();
+    if (nightNow && !wasNight) {
+      // Gecə başladı — oyunçunun ətrafında zombilər peyda olur
+      spawnNightZombies(camera.position.x, camera.position.z, 4 + Math.floor(Math.random() * 3));
+      showHint('Gecə düşdü... zombilər oyandı 🧟');
+    } else if (!nightNow && wasNight) {
+      // Gündüz oldu — zombilər yox olur
+      despawnAllZombies();
+    }
+    wasNight = nightNow;
+    updateDayNightIndicator(nightNow);
+
+    const feet = {
+      x: camera.position.x,
+      y: camera.position.y - EYE_HEIGHT,
+      z: camera.position.z,
+    };
+    const sheltered = isPlayerSheltered(feet);
+    const caught = updateZombies(dt, feet);
+    if (caught && !sheltered) {
+      triggerGameOver();
+    }
+  }
+
   renderer.render(scene, camera);
 }
 animate();
