@@ -12,7 +12,7 @@ if (!isTouchDevice) {
   renderer.domElement.addEventListener('mousedown', (e) => {
     if (document.pointerLockElement !== renderer.domElement) return;
     if (e.button === 0) doAction('break');
-    else if (e.button === 2) doAction('place');
+    else if (e.button === 2) doAction('place');f
   });
   renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 }

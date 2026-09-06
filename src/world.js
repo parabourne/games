@@ -15,8 +15,6 @@ renderer.shadowMap.enabled = true;
 document.getElementById('app').appendChild(renderer.domElement);
 
 // ---------- İŞIQ ----------
-// YENİ: ambient işıq artıq dəyişkəndə saxlanılır ki, gecə-gündüz dövründə
-// intensivliyini dəyişə bilək (gecə daha qaranlıq olsun deyə).
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -31,57 +29,47 @@ scene.add(sun);
 // ---------- BLOK GEOMETRİYALARI ----------
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
-// YENİ: Yataq artıq tam kub deyil — yastı, çarpayı formalı bir geometriyadır.
-// Hündürlüyü 0.55 (əvəzinə 1), aşağı tərəfdən adi blokların altı ilə eyni
-// səviyyədə (y-0.5) dayanması üçün geometriyanı özü daxilində aşağı sürüşdürürük.
 const BED_HEIGHT = 0.55;
 const bedGeo = new THREE.BoxGeometry(1, BED_HEIGHT, 1);
 bedGeo.translate(0, -(1 - BED_HEIGHT) / 2, 0);
 
 // ---------- BLOK MATERİALLARI ----------
-// YENİ: Ot (grass) bloku artıq tək rəngli deyil — üstü yaşıl, yanları/altı
-// isə torpaq rənginə yaxın olur (klassik Minecraft görünüşü). BoxGeometry
-// üzləri default olaraq bu ardıcıllıqla qruplaşır: [+x, -x, +y(üst),
-// -y(alt), +z, -z] — ona görə materials array-i bu sıra ilə verilir.
 const grassSideMat = new THREE.MeshLambertMaterial({ color: 0x6f9c52 });
 const grassTopMat = new THREE.MeshLambertMaterial({ color: 0x4caf50 });
 const grassBottomMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
 const grassMaterials = [
   grassSideMat, grassSideMat, // +x, -x
   grassTopMat,                // +y (üst)
-  grassBottomMat,              // -y (alt)
+  grassBottomMat,             // -y (alt)
   grassSideMat, grassSideMat, // +z, -z
 ];
 
-const materials = {
+export const materials = {
   grass: grassMaterials,
   dirt: new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
   stone: new THREE.MeshLambertMaterial({ color: 0x888888 }),
-  // YENİ: Kömür filizi — bazası daşla eyni boz rəng, üzərində qara
-  // "ləkələr" hissi vermək üçün daha tünd, demək olar qara çalar seçilib.
-  // Sadəlik üçün tək materialdan istifadə olunur (grass kimi çoxüzlü deyil).
   coal_ore: new THREE.MeshLambertMaterial({ color: 0x333333 }),
-  wood: new THREE.MeshLambertMaterial({ color: 0x6b4423 }),
+  wood: new THREE.MeshLambertMaterial({ color: 0x6b4423 }),      // Ağac gövdəsi
+  leaves: new THREE.MeshLambertMaterial({ color: 0x2e8b57 }),    // ƏLAVƏ EDİLDİ: Yarpaqlar
   sand: new THREE.MeshLambertMaterial({ color: 0xe6d28a }),
-  // Craft edilən yataq — indi yastı çarpayı həndəsəsi ilə göstərilir
   bed: new THREE.MeshLambertMaterial({ color: 0xd9534f }),
 };
 
-// Hər blok növü üçün hansı geometriyanın istifadə olunacağını təyin edir
 function geometryFor(type) {
   return type === 'bed' ? bedGeo : boxGeo;
 }
 
 // ---------- DÜNYA ÖLÇÜSÜ ----------
-export const SIZE = 64;
+export const SIZE = 128;
 
-// ---------- BLOK SİSTEMİ (InstancedMesh — performans üçün) ----------
+// ---------- BLOK SİSTEMİ (InstancedMesh) ----------
 const capacities = {
   grass: SIZE * SIZE + 1500,
   dirt: SIZE * SIZE + 500,
   stone: SIZE * SIZE + 500,
   coal_ore: 500,
-  wood: 2000,
+  wood: 3000,   // ƏLAVƏ EDİLDİ: Ağac gövdələri üçün tutum artırıldı
+  leaves: 5000, // ƏLAVƏ EDİLDİ: Yarpaqlar üçün tutum
   sand: 2000,
   bed: 200,
 };
@@ -100,16 +88,6 @@ for (const type of Object.keys(materials)) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.userData.blockType = type;
-
-  // ---- BUG FIX: frustum culling ----
-  // InstancedMesh-in default bounding sphere-i yalnız geometriyanın öz
-  // (kiçik, mərkəzdəki) radiusunu əhatə edir — bütün instansların əhatə
-  // etdiyi sahəni YOX. Nəticədə kamera müəyyən bucaqda olanda Three.js
-  // bütün mesh-i (yəni bütün həmin tipdəki blokları) səhvən "görüş
-  // sahəsindən kənarda" hesab edib render etmirdi — "blok bəzən
-  // görünmür" bug-ının əsl səbəbi budur.
-  // Dünya nisbətən kiçik olduğu üçün ən sadə və etibarlı həll: bu
-  // mesh üçün frustum culling-i tamamilə deaktiv etmək.
   mesh.frustumCulled = false;
 
   scene.add(mesh);
@@ -137,7 +115,7 @@ export function addBlock(x, y, z, type = 'grass') {
   if (freeList[type].length > 0) {
     index = freeList[type].pop();
   } else {
-    if (usedCount[type] >= capacities[type]) return; // tutum bitib
+    if (usedCount[type] >= capacities[type]) return;
     index = usedCount[type]++;
   }
 
@@ -155,7 +133,7 @@ export function removeBlockByKey(k) {
   const info = blocks.get(k);
   if (!info) return;
   const mesh = instancedMeshes[info.type];
-  dummy.position.set(0, -1000, 0); // gözdən uzaqlaşdır
+  dummy.position.set(0, -1000, 0);
   dummy.updateMatrix();
   mesh.setMatrixAt(info.index, dummy.matrix);
   mesh.instanceMatrix.needsUpdate = true;
@@ -165,8 +143,6 @@ export function removeBlockByKey(k) {
 }
 
 // ---------- YER (torpaq) YARAT ----------
-// Kömür filizinin daş laylarında nə qədər tez-tez çıxacağını təyin edir
-// (0.08 = hər stone blokunun ~8%-i əvəzinə kömür qoyulur).
 const COAL_CHANCE = 0.08;
 
 for (let x = -SIZE / 2; x < SIZE / 2; x++) {
@@ -179,6 +155,45 @@ for (let x = -SIZE / 2; x < SIZE / 2; x++) {
 }
 export const GROUND_TOP = 0.5;
 
+// ---------- ƏLAVƏ EDİLDİ: AĞAC GENERASİYASI ----------
+function generateTrees() {
+  const treeCount = 60; // Xəritədə yaranacaq təsadüfi ağac sayı
+  const minDist = 4;    // Ağaclar arasında minimum məsafə
+
+  for (let i = 0; i < treeCount; i++) {
+    const x = Math.floor(Math.random() * (SIZE - 20)) - (SIZE / 2 - 10);
+    const z = Math.floor(Math.random() * (SIZE - 20)) - (SIZE / 2 - 10);
+    
+    // Şəhər mərkəzində və ya təsadüfi eyni yerdə ağacların düşməməsi üçün:
+    if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
+
+    const trunkHeight = 4 + Math.floor(Math.random() * 2); // 4-5 blok hündürlükdə gövdə
+
+    // 1. Ağac gövdəsini yarat
+    for (let y = 1; y <= trunkHeight; y++) {
+      addBlock(x, y, z, 'wood');
+    }
+
+    // 2. Yarpaqları yarat (gövdənin yuxarısına baş kəsiyində)
+    for (let lx = -2; lx <= 2; lx++) {
+      for (let lz = -2; lz <= 2; lz++) {
+        for (let ly = trunkHeight - 1; ly <= trunkHeight + 1; ly++) {
+          // Bucaqların kəsilməsi (kürəvi/təbii görünüş üçün)
+          if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly !== trunkHeight) continue;
+          
+          const targetKey = key(x + lx, ly, z + lz);
+          if (!blocks.has(targetKey)) {
+            addBlock(x + lx, ly, z + lz, 'leaves');
+          }
+        }
+      }
+    }
+  }
+}
+
+// Dünyanı yaradarkən ağacları da avtomatik generasiya et
+generateTrees();
+
 // ---------- DƏNİZ ----------
 const waterGeo = new THREE.PlaneGeometry(500, 500);
 const waterMat = new THREE.MeshLambertMaterial({
@@ -188,19 +203,14 @@ const waterMat = new THREE.MeshLambertMaterial({
 });
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.rotation.x = -Math.PI / 2;
-water.position.y = 0.05; // grass səthindən (0.5) bir az aşağı - ada altında görünmür
+water.position.y = 0.05;
 scene.add(water);
 
 // ---------- GECƏ-GÜNDÜZ DÖVRÜ ----------
-// Tam bir dövr (gündüz + gecə) neçə saniyə çəkir. İstəsən sürətləndirmək/
-// yavaşlatmaq üçün sadəcə bu ədədi dəyiş.
 export const DAY_LENGTH = 180;
-// Dövrün nə qədəri gündüz olsun (0.7 = 70% gündüz, 30% gecə)
 const DAY_FRACTION = 0.7;
-// Gündüz/gecə arasında keçidin nə qədər yumşaq olacağı (dövrün faizi kimi)
 const TRANSITION = 0.05;
 
-// Sübh vaxtından başlasın deyə dövrün kiçik bir hissəsindən başlayırıq
 export let dayTime = DAY_LENGTH * 0.05;
 let _isNight = false;
 
@@ -214,7 +224,6 @@ export function isNight() {
   return _isNight;
 }
 
-// Yataqda yatanda çağırılır — vaxtı birbaşa sübhə keçirir
 export function skipToMorning() {
   dayTime = DAY_LENGTH * 0.05;
   applyDayNightVisuals();
@@ -222,9 +231,8 @@ export function skipToMorning() {
 }
 
 function applyDayNightVisuals() {
-  const t = dayTime / DAY_LENGTH; // 0..1
+  const t = dayTime / DAY_LENGTH;
 
-  // mix: 0 = tam gündüz görünüşü, 1 = tam gecə görünüşü
   let mix;
   if (t < DAY_FRACTION - TRANSITION) {
     mix = 0;
@@ -247,7 +255,6 @@ function applyDayNightVisuals() {
   ambientLight.intensity = 0.6 - 0.45 * mix;
 }
 
-// Hər frame-də main.js tərəfindən çağırılmalıdır
 export function updateDayNightCycle(dt) {
   dayTime = (dayTime + dt) % DAY_LENGTH;
   const t = dayTime / DAY_LENGTH;
