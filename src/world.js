@@ -61,6 +61,11 @@ function geometryFor(type) {
 // ---------- DÜNYA ÖLÇÜSÜ ----------
 export const SIZE = 128;
 
+// Heyvanların (və digər səthdə gəzən varlıqların) təxmini spawn/yerdə
+// qalma hündürlüyü. Relyef 2-18 arası dəyişdiyi üçün bu tam dəqiq deyil,
+// amma ortalama bir səviyyədir (animals.js bunu istifadə edir).
+export const GROUND_TOP = 7;
+
 // ---------- BLOK SİSTEMİ (InstancedMesh) ----------
 const capacities = {
   grass: SIZE * SIZE * 2,
