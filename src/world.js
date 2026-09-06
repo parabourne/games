@@ -7,7 +7,7 @@ scene.fog = new THREE.Fog(0x87ceeb, 40, 130);
 
 export const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 export const DEFAULT_FOV = 75;
-camera.position.set(10, 16, 10);
+camera.position.set(0, 25, 0); // Oyunçunun başlanğıc mövqeyi yuxarı qaldırıldı
 
 export const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -18,17 +18,16 @@ document.getElementById('app').appendChild(renderer.domElement);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xffffff, 0.8);
-sun.position.set(30, 40, 15);
+sun.position.set(30, 50, 15);
 sun.castShadow = true;
-sun.shadow.camera.left = -40;
-sun.shadow.camera.right = 40;
-sun.shadow.camera.top = 40;
-sun.shadow.camera.bottom = -40;
+sun.shadow.camera.left = -60;
+sun.shadow.camera.right = 60;
+sun.shadow.camera.top = 60;
+sun.shadow.camera.bottom = -60;
 scene.add(sun);
 
 // ---------- BLOK GEOMETRİYALARI ----------
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-
 const BED_HEIGHT = 0.55;
 const bedGeo = new THREE.BoxGeometry(1, BED_HEIGHT, 1);
 bedGeo.translate(0, -(1 - BED_HEIGHT) / 2, 0);
@@ -38,10 +37,9 @@ const grassSideMat = new THREE.MeshLambertMaterial({ color: 0x6f9c52 });
 const grassTopMat = new THREE.MeshLambertMaterial({ color: 0x4caf50 });
 const grassBottomMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
 const grassMaterials = [
-  grassSideMat, grassSideMat, // +x, -x
-  grassTopMat,                // +y (üst)
-  grassBottomMat,             // -y (alt)
-  grassSideMat, grassSideMat, // +z, -z
+  grassSideMat, grassSideMat,
+  grassTopMat, grassBottomMat,
+  grassSideMat, grassSideMat,
 ];
 
 export const materials = {
@@ -49,8 +47,8 @@ export const materials = {
   dirt: new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
   stone: new THREE.MeshLambertMaterial({ color: 0x888888 }),
   coal_ore: new THREE.MeshLambertMaterial({ color: 0x333333 }),
-  wood: new THREE.MeshLambertMaterial({ color: 0x6b4423 }),      // Ağac gövdəsi
-  leaves: new THREE.MeshLambertMaterial({ color: 0x2e8b57 }),    // ƏLAVƏ EDİLDİ: Yarpaqlar
+  wood: new THREE.MeshLambertMaterial({ color: 0x6b4423 }),
+  leaves: new THREE.MeshLambertMaterial({ color: 0x2e8b57 }),
   sand: new THREE.MeshLambertMaterial({ color: 0xe6d28a }),
   bed: new THREE.MeshLambertMaterial({ color: 0xd9534f }),
 };
@@ -64,13 +62,13 @@ export const SIZE = 128;
 
 // ---------- BLOK SİSTEMİ (InstancedMesh) ----------
 const capacities = {
-  grass: SIZE * SIZE + 1500,
-  dirt: SIZE * SIZE + 500,
-  stone: SIZE * SIZE + 500,
-  coal_ore: 500,
-  wood: 3000,   // ƏLAVƏ EDİLDİ: Ağac gövdələri üçün tutum artırıldı
-  leaves: 5000, // ƏLAVƏ EDİLDİ: Yarpaqlar üçün tutum
-  sand: 2000,
+  grass: SIZE * SIZE * 2,
+  dirt: SIZE * SIZE * 4,
+  stone: SIZE * SIZE * 8,
+  coal_ore: 1200,
+  wood: 4000,
+  leaves: 8000,
+  sand: SIZE * SIZE,
   bed: 200,
 };
 
@@ -78,7 +76,7 @@ export const instancedMeshes = {};
 const freeList = {};
 const usedCount = {};
 export const indexToKey = {};
-export const blocks = new Map(); // key -> { type, index }
+export const blocks = new Map();
 const dummy = new THREE.Object3D();
 
 for (const type of Object.keys(materials)) {
@@ -97,12 +95,8 @@ for (const type of Object.keys(materials)) {
   indexToKey[type] = [];
 }
 
-export function key(x, y, z) {
-  return `${x},${y},${z}`;
-}
-export function parseKey(k) {
-  return k.split(',').map(Number);
-}
+export function key(x, y, z) { return `${x},${y},${z}`; }
+export function parseKey(k) { return k.split(',').map(Number); }
 
 export function addBlock(x, y, z, type = 'grass') {
   x = Math.round(x); y = Math.round(y); z = Math.round(z);
@@ -142,48 +136,82 @@ export function removeBlockByKey(k) {
   blocks.delete(k);
 }
 
-// ---------- YER (torpaq) YARAT ----------
-const COAL_CHANCE = 0.08;
+// ---------- DAĞLAR VƏ RELİYEF GENERASİYASI ----------
+// Sadə dalğa alqoritmi vasitəsilə dağlar/vadilər hesablanır
+function getTerrainHeight(x, z) {
+  const scale1 = 0.03;
+  const scale2 = 0.08;
+  
+  const wave1 = Math.sin(x * scale1) * Math.cos(z * scale1) * 8;
+  const wave2 = Math.sin(x * scale2 + 1.5) * Math.cos(z * scale2 + 1.5) * 4;
+  const wave3 = Math.sin((x + z) * 0.02) * 6;
 
+  // Hündürlüyü 2 ilə 18 blok arasında təyin edirik
+  return Math.floor(wave1 + wave2 + wave3 + 6);
+}
+
+const COAL_CHANCE = 0.08;
+const WATER_LEVEL = 2; // Su səviyyəsi
+
+// Dünyanı yaratmaq
 for (let x = -SIZE / 2; x < SIZE / 2; x++) {
   for (let z = -SIZE / 2; z < SIZE / 2; z++) {
-    addBlock(x, 0, z, 'grass');
-    addBlock(x, -1, z, 'dirt');
-    const stoneType = Math.random() < COAL_CHANCE ? 'coal_ore' : 'stone';
-    addBlock(x, -2, z, stoneType);
+    const height = getTerrainHeight(x, z);
+
+    // Ən üst blok növü (Hündürlüyə görə dəyişir)
+    let topBlock = 'grass';
+    if (height <= WATER_LEVEL + 1) {
+      topBlock = 'sand'; // Suya yaxın yerlər qumluqdur
+    } else if (height > 12) {
+      topBlock = 'stone'; // Çox uca dağ zirvələri daşlıqdır
+    }
+
+    // Ən üst blok
+    addBlock(x, height, z, topBlock);
+
+    // Torpaq təbəqəsi (Altındakı 2-3 blok)
+    for (let y = height - 1; y >= height - 3; y--) {
+      const subType = (topBlock === 'stone') ? 'stone' : 'dirt';
+      addBlock(x, y, z, subType);
+    }
+
+    // Dərinliklər (Daşlar və Kömür filizləri)
+    for (let y = height - 4; y >= -4; y--) {
+      const stoneType = Math.random() < COAL_CHANCE ? 'coal_ore' : 'stone';
+      addBlock(x, y, z, stoneType);
+    }
   }
 }
-export const GROUND_TOP = 0.5;
 
-// ---------- ƏLAVƏ EDİLDİ: AĞAC GENERASİYASI ----------
+// ---------- AĞACLARI DAĞLARA UYĞUN OLARAQ EKMƏK ----------
 function generateTrees() {
-  const treeCount = 60; // Xəritədə yaranacaq təsadüfi ağac sayı
-  const minDist = 4;    // Ağaclar arasında minimum məsafə
+  const treeCount = 70;
 
   for (let i = 0; i < treeCount; i++) {
     const x = Math.floor(Math.random() * (SIZE - 20)) - (SIZE / 2 - 10);
     const z = Math.floor(Math.random() * (SIZE - 20)) - (SIZE / 2 - 10);
-    
-    // Şəhər mərkəzində və ya təsadüfi eyni yerdə ağacların düşməməsi üçün:
-    if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
+    const groundHeight = getTerrainHeight(x, z);
 
-    const trunkHeight = 4 + Math.floor(Math.random() * 2); // 4-5 blok hündürlükdə gövdə
+    // Ağaclar yalnız otluqda bitir (suda/qumda və dağ zirvələrində bitmir)
+    if (groundHeight <= WATER_LEVEL + 1 || groundHeight > 12) continue;
 
-    // 1. Ağac gövdəsini yarat
+    const trunkHeight = 4 + Math.floor(Math.random() * 2);
+
+    // Gövdə
     for (let y = 1; y <= trunkHeight; y++) {
-      addBlock(x, y, z, 'wood');
+      addBlock(x, groundHeight + y, z, 'wood');
     }
 
-    // 2. Yarpaqları yarat (gövdənin yuxarısına baş kəsiyində)
+    // Yarpaqlar
     for (let lx = -2; lx <= 2; lx++) {
       for (let lz = -2; lz <= 2; lz++) {
         for (let ly = trunkHeight - 1; ly <= trunkHeight + 1; ly++) {
-          // Bucaqların kəsilməsi (kürəvi/təbii görünüş üçün)
           if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly !== trunkHeight) continue;
           
-          const targetKey = key(x + lx, ly, z + lz);
+          const leafY = groundHeight + ly;
+          const targetKey = key(x + lx, leafY, z + lz);
           if (!blocks.has(targetKey)) {
-            addBlock(x + lx, ly, z + lz, 'leaves');
+            addBlock(x + lx, leafY, z + lz, 'leaves');
           }
         }
       }
@@ -191,19 +219,18 @@ function generateTrees() {
   }
 }
 
-// Dünyanı yaradarkən ağacları da avtomatik generasiya et
 generateTrees();
 
 // ---------- DƏNİZ ----------
-const waterGeo = new THREE.PlaneGeometry(500, 500);
+const waterGeo = new THREE.PlaneGeometry(SIZE * 2, SIZE * 2);
 const waterMat = new THREE.MeshLambertMaterial({
   color: 0x2389da,
   transparent: true,
-  opacity: 0.75,
+  opacity: 0.7,
 });
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.rotation.x = -Math.PI / 2;
-water.position.y = 0.05;
+water.position.y = WATER_LEVEL + 0.4;
 scene.add(water);
 
 // ---------- GECƏ-GÜNDÜZ DÖVRÜ ----------
@@ -220,9 +247,7 @@ const DAY_FOG_NEAR = 40, DAY_FOG_FAR = 130;
 const NIGHT_FOG_NEAR = 12, NIGHT_FOG_FAR = 45;
 const _mixColor = new THREE.Color();
 
-export function isNight() {
-  return _isNight;
-}
+export function isNight() { return _isNight; }
 
 export function skipToMorning() {
   dayTime = DAY_LENGTH * 0.05;
@@ -232,17 +257,11 @@ export function skipToMorning() {
 
 function applyDayNightVisuals() {
   const t = dayTime / DAY_LENGTH;
-
   let mix;
-  if (t < DAY_FRACTION - TRANSITION) {
-    mix = 0;
-  } else if (t < DAY_FRACTION + TRANSITION) {
-    mix = (t - (DAY_FRACTION - TRANSITION)) / (TRANSITION * 2);
-  } else if (t < 1 - TRANSITION) {
-    mix = 1;
-  } else {
-    mix = 1 - (t - (1 - TRANSITION)) / TRANSITION;
-  }
+  if (t < DAY_FRACTION - TRANSITION) { mix = 0; }
+  else if (t < DAY_FRACTION + TRANSITION) { mix = (t - (DAY_FRACTION - TRANSITION)) / (TRANSITION * 2); }
+  else if (t < 1 - TRANSITION) { mix = 1; }
+  else { mix = 1 - (t - (1 - TRANSITION)) / TRANSITION; }
   mix = Math.max(0, Math.min(1, mix));
 
   _mixColor.copy(DAY_SKY).lerp(NIGHT_SKY, mix);
@@ -262,7 +281,6 @@ export function updateDayNightCycle(dt) {
   applyDayNightVisuals();
 }
 
-// ---------- PƏNCƏRƏ ÖLÇÜSÜ ----------
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
