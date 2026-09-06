@@ -12,6 +12,7 @@ import {
 } from './world.js';
 import { animals, updateAnimals, damageAnimal } from './animals.js';
 import { addToInventory, removeFromInventory } from './inventory.js';
+import { resolveMovement, isOnGround, EYE_HEIGHT } from './collision.js';
 import './craft.js'; // craft panelinin özü DOM listener-lərini burada qurur
 
 // ---------- TOUCH CİHAZ TƏYİNİ ----------
@@ -172,10 +173,14 @@ if (isTouchDevice) {
 
 // ---------- HƏRƏKƏT HESABLAMASI ----------
 const velocity = new THREE.Vector3();
-let canJump = false;
 const GRAVITY = -20;
 const JUMP_SPEED = 8;
 const MOVE_SPEED = 6;
+
+// Dünyanın "boşluğuna" (heç bir blok olmayan yerə) düşərsə, oyunçunu
+// təhlükəsiz nöqtəyə qaytarmaq üçün sadə mühafizə
+const VOID_Y = -30;
+const RESPAWN_FEET = { x: 0, y: 5, z: 0 };
 
 function updateMovement(dt) {
   const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
@@ -202,21 +207,51 @@ function updateMovement(dt) {
   velocity.z = move.z;
   velocity.y += GRAVITY * dt;
 
-  if ((keys['Space'] || touchJump) && canJump) {
-    velocity.y = JUMP_SPEED;
-    canJump = false;
-  }
+  // Ayaq (feet) mövqeyi kameradan hesablanır
+  const feet = {
+    x: camera.position.x,
+    y: camera.position.y - EYE_HEIGHT,
+    z: camera.position.z,
+  };
 
-  camera.position.x += velocity.x * dt;
-  camera.position.z += velocity.z * dt;
-  camera.position.y += velocity.y * dt;
+  const delta = {
+    x: velocity.x * dt,
+    y: velocity.y * dt,
+    z: velocity.z * dt,
+  };
 
-  const groundY = 0 + 1.7;
-  if (camera.position.y <= groundY) {
-    camera.position.y = groundY;
+  const result = resolveMovement(feet, delta);
+  let finalFeet = result.position;
+
+  const grounded = isOnGround(finalFeet);
+
+  // BUG FIX: 'başım bloka dəydimi' yoxlaması tullanma təyinatından ƏVVƏL
+  // olmalıdır. Əvvəlki sıralamada bu yoxlama tullanmadan SONRA gəlirdi və
+  // result.collided.y yerdə dayananda da true olduğu üçün, təzəcə təyin
+  // olunan JUMP_SPEED (müsbət) dərhal 0-a sıfırlanırdı — tullanma öz-özünü
+  // ləğv edirdi. İndi bu yoxlama yalnız BU FRAME-in artıq baş vermiş
+  // (tullanmadan əvvəlki) hərəkətinə aiddir.
+  if (result.collided.y && velocity.y > 0) {
     velocity.y = 0;
-    canJump = true;
   }
+
+  // Tullanma — yalnız yerdə olanda
+  if ((keys['Space'] || touchJump) && grounded) {
+    velocity.y = JUMP_SPEED;
+  } else if (grounded && velocity.y < 0) {
+    // Blokla toqquşub yerdə olanda düşmə sürətini sıfırla
+    velocity.y = 0;
+  }
+
+  // Boşluğa düşübsə, təhlükəsiz nöqtəyə qaytar
+  if (finalFeet.y < VOID_Y) {
+    finalFeet = { ...RESPAWN_FEET };
+    velocity.set(0, 0, 0);
+  }
+
+  camera.position.x = finalFeet.x;
+  camera.position.y = finalFeet.y + EYE_HEIGHT;
+  camera.position.z = finalFeet.z;
 
   camera.rotation.order = 'YXZ';
   camera.rotation.y = yaw;
