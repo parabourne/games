@@ -29,11 +29,12 @@ const BLOCK_DROPS = {
   grass: 'dirt',
   dirt: 'dirt',
   sand: 'sand',
+  crafting_table: 'crafting_table',
 };
 
 // Hotbar-dan yalnız BU itemlər blok kimi yerə qoyula bilər. Bunun xaricində
 // olan itemlər (meat, coal, tools və s.) qoyula bilməz.
-const PLACEABLE_BLOCKS = new Set(['dirt', 'stone', 'wood', 'sand', 'bed']);
+const PLACEABLE_BLOCKS = new Set(['dirt', 'stone', 'wood', 'sand', 'bed', 'crafting_table']);
 
 function findAnimalRoot(obj) {
   let o = obj;
@@ -160,6 +161,17 @@ export function isPlayerSheltered(feet) {
 function isNearBed(feet, radius = 3) {
   for (const [k, info] of blocks) {
     if (info.type !== 'bed') continue;
+    const [bx, by, bz] = parseKey(k);
+    const dist = Math.hypot(bx - feet.x, by - feet.y, bz - feet.z);
+    if (dist <= radius) return true;
+  }
+  return false;
+}
+
+// ---------- ƏŞYA YAPMA MASASI YAXINLIĞI ----------
+export function isNearCraftingTable(feet, radius = 3) {
+  for (const [k, info] of blocks) {
+    if (info.type !== 'crafting_table') continue;
     const [bx, by, bz] = parseKey(k);
     const dist = Math.hypot(bx - feet.x, by - feet.y, bz - feet.z);
     if (dist <= radius) return true;

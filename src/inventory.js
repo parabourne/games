@@ -34,6 +34,7 @@ const ICONS = {
   coal: '⚫',
   planks: '🪵',
   stick: '🥢',
+  crafting_table: '🛠️',
 
   // hazırlanan (craft) itemlər
   cooked_meat: '🍖',

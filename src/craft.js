@@ -1,90 +1,19 @@
 import { inventory, addToInventory, removeFromInventory } from './inventory.js';
+import { isNearCraftingTable } from './actions.js';
+import { camera } from './world.js';
+import { EYE_HEIGHT } from './collision.js';
 
 // ---------- RESEPTLƏR ----------
-// Hər reseptə "category" əlavə olundu ki, panel taplar üzrə süzülə bilsin.
+// requiresTable: false  -> əl ilə, masa lazım deyil (2x2)
+// requiresTable: true   -> yalnız yerləşdirilmiş masa yaxınlığında (3x3)
 export const RECIPES = [
-  // --- Yemək ---
-  {
-    id: 'cooked_meat',
-    name: 'Bişmiş ət',
-    icon: '🍖',
-    category: 'food',
-    inputs: { meat: 2 },
-    output: { item: 'cooked_meat', count: 1 },
-    desc: 'Aclığı yaxşı doyurur.',
-  },
-  {
-    id: 'bread',
-    name: 'Çörək',
-    icon: '🍞',
-    category: 'food',
-    inputs: { wheat: 3 },
-    output: { item: 'bread', count: 1 },
-    desc: 'Sürətli və ucuz qida.',
-  },
-  {
-    id: 'stew',
-    name: 'Sıyıq',
-    icon: '🍲',
-    category: 'food',
-    inputs: { meat: 1, carrot: 1, potato: 1 },
-    output: { item: 'stew', count: 1 },
-    desc: 'Uzun müddət doyur.',
-  },
-
-  // --- Alətlər ---
-  {
-    id: 'wood_pickaxe',
-    name: 'Taxta külüng',
-    icon: '⛏️',
-    category: 'tools',
-    inputs: { wood: 3, stick: 2 },
-    output: { item: 'wood_pickaxe', count: 1 },
-    desc: 'Daşı və filizi çıxarmaq üçün ilkin alət.',
-  },
-  {
-    id: 'stone_pickaxe',
-    name: 'Daş külüng',
-    icon: '🪨',
-    category: 'tools',
-    inputs: { stone: 3, stick: 2 },
-    output: { item: 'stone_pickaxe', count: 1 },
-    desc: 'Taxta külüngdən daha davamlıdır.',
-  },
-  {
-    id: 'axe',
-    name: 'Balta',
-    icon: '🪓',
-    category: 'tools',
-    inputs: { wood: 3, stick: 2 },
-    output: { item: 'axe', count: 1 },
-    desc: 'Ağacları daha sürətli kəsir.',
-  },
-  {
-    id: 'sword',
-    name: 'Qılınc',
-    icon: '🗡️',
-    category: 'tools',
-    inputs: { stone: 2, stick: 1 },
-    output: { item: 'sword', count: 1 },
-    desc: 'Canlılara qarşı əsas silah.',
-  },
-  {
-    id: 'hoe',
-    name: 'Bel',
-    icon: '🌾',
-    category: 'tools',
-    inputs: { wood: 2, stick: 2 },
-    output: { item: 'hoe', count: 1 },
-    desc: 'Torpağı əkin üçün hazırlayır.',
-  },
-
-  // --- Tikinti ---
+  // --- Sadə (masasız) ---
   {
     id: 'planks',
     name: 'Taxta lövhə',
     icon: '🪵',
     category: 'building',
+    requiresTable: false,
     inputs: { wood: 1 },
     output: { item: 'planks', count: 4 },
     desc: 'Əsas tikinti materialı.',
@@ -94,15 +23,113 @@ export const RECIPES = [
     name: 'Çubuq',
     icon: '🥢',
     category: 'building',
+    requiresTable: false,
     inputs: { planks: 2 },
     output: { item: 'stick', count: 4 },
     desc: 'Alət və silah üçün lazımdır.',
   },
   {
+    id: 'crafting_table',
+    name: 'Əşya yapma masası',
+    icon: '🛠️',
+    category: 'building',
+    requiresTable: false,
+    inputs: { planks: 4 },
+    output: { item: 'crafting_table', count: 1 },
+    desc: 'Yerə qoy — inkişaf etmiş reseptlərə çıxış qazanırsan.',
+  },
+
+  // --- Yemək (masa ilə) ---
+  {
+    id: 'cooked_meat',
+    name: 'Bişmiş ət',
+    icon: '🍖',
+    category: 'food',
+    requiresTable: true,
+    inputs: { meat: 2 },
+    output: { item: 'cooked_meat', count: 1 },
+    desc: 'Aclığı yaxşı doyurur.',
+  },
+  {
+    id: 'bread',
+    name: 'Çörək',
+    icon: '🍞',
+    category: 'food',
+    requiresTable: true,
+    inputs: { wheat: 3 },
+    output: { item: 'bread', count: 1 },
+    desc: 'Sürətli və ucuz qida.',
+  },
+  {
+    id: 'stew',
+    name: 'Sıyıq',
+    icon: '🍲',
+    category: 'food',
+    requiresTable: true,
+    inputs: { meat: 1, carrot: 1, potato: 1 },
+    output: { item: 'stew', count: 1 },
+    desc: 'Uzun müddət doyur.',
+  },
+
+  // --- Alətlər (masa ilə) ---
+  {
+    id: 'wood_pickaxe',
+    name: 'Taxta külüng',
+    icon: '⛏️',
+    category: 'tools',
+    requiresTable: true,
+    inputs: { wood: 3, stick: 2 },
+    output: { item: 'wood_pickaxe', count: 1 },
+    desc: 'Daşı və filizi çıxarmaq üçün ilkin alət.',
+  },
+  {
+    id: 'stone_pickaxe',
+    name: 'Daş külüng',
+    icon: '🪨',
+    category: 'tools',
+    requiresTable: true,
+    inputs: { stone: 3, stick: 2 },
+    output: { item: 'stone_pickaxe', count: 1 },
+    desc: 'Taxta külüngdən daha davamlıdır.',
+  },
+  {
+    id: 'axe',
+    name: 'Balta',
+    icon: '🪓',
+    category: 'tools',
+    requiresTable: true,
+    inputs: { wood: 3, stick: 2 },
+    output: { item: 'axe', count: 1 },
+    desc: 'Ağacları daha sürətli kəsir.',
+  },
+  {
+    id: 'sword',
+    name: 'Qılınc',
+    icon: '🗡️',
+    category: 'tools',
+    requiresTable: true,
+    inputs: { stone: 2, stick: 1 },
+    output: { item: 'sword', count: 1 },
+    desc: 'Canlılara qarşı əsas silah.',
+  },
+  {
+    id: 'hoe',
+    name: 'Bel',
+    icon: '🌾',
+    category: 'tools',
+    requiresTable: true,
+    inputs: { wood: 2, stick: 2 },
+    output: { item: 'hoe', count: 1 },
+    desc: 'Torpağı əkin üçün hazırlayır.',
+  },
+
+  // --- Tikinti (masa ilə) ---
+  {
     id: 'door',
     name: 'Qapı',
     icon: '🚪',
     category: 'building',
+    requiresTable: true,
     inputs: { planks: 6 },
     output: { item: 'door', count: 1 },
     desc: 'Evinizi bağlayın.',
@@ -112,6 +139,7 @@ export const RECIPES = [
     name: 'Məşəl',
     icon: '🔥',
     category: 'building',
+    requiresTable: true,
     inputs: { stick: 1, coal: 1 },
     output: { item: 'torch', count: 4 },
     desc: 'İşıqlandırma üçün.',
@@ -121,17 +149,19 @@ export const RECIPES = [
     name: 'Yataq',
     icon: '🛏️',
     category: 'building',
+    requiresTable: true,
     inputs: { wool: 3, leather: 2 },
     output: { item: 'bed', count: 1 },
     desc: 'Dünyaya qoyula bilər, gecəni keçirmək üçün.',
   },
 
-  // --- Geyim ---
+  // --- Geyim (masa ilə) ---
   {
     id: 'leather_boots',
     name: 'Dəri çəkmə',
     icon: '👢',
     category: 'armor',
+    requiresTable: true,
     inputs: { leather: 4 },
     output: { item: 'leather_boots', count: 1 },
     desc: 'Ayaqları qoruyur.',
@@ -141,6 +171,7 @@ export const RECIPES = [
     name: 'Yun papaq',
     icon: '🧢',
     category: 'armor',
+    requiresTable: true,
     inputs: { wool: 3 },
     output: { item: 'wool_hat', count: 1 },
     desc: 'Soyuqdan qoruyur.',
@@ -159,6 +190,16 @@ export const CATEGORIES = [
 let activeCategory = 'all';
 let searchQuery = '';
 let longPressTimer = null;
+
+// ---------- MASAYA YAXINLIQ ----------
+function nearTableNow() {
+  const feet = {
+    x: camera.position.x,
+    y: camera.position.y - EYE_HEIGHT,
+    z: camera.position.z,
+  };
+  return isNearCraftingTable(feet);
+}
 
 // ---------- KÖMƏKÇİ FUNKSİYALAR ----------
 function maxCraftable(recipe) {
@@ -194,6 +235,13 @@ function filteredRecipes() {
 function craftItem(recipeId, times = 1) {
   const recipe = RECIPES.find((r) => r.id === recipeId);
   if (!recipe) return;
+
+  if (recipe.requiresTable && !nearTableNow()) {
+    showHint('Bunun üçün əşya yapma masası yanında olmalısan 🛠️');
+    renderCraftPanel();
+    return;
+  }
+
   const actualTimes = Math.min(times, maxCraftable(recipe));
   if (actualTimes <= 0) return;
 
@@ -244,16 +292,8 @@ function buildRowHtml(recipe) {
     </div>`;
 }
 
-export function renderCraftPanel() {
-  const list = document.getElementById('craft-list');
-  if (!list) return;
-
-  const recipes = filteredRecipes();
-  list.innerHTML = recipes.length
-    ? recipes.map(buildRowHtml).join('')
-    : `<div class="craft-empty">Heç nə tapılmadı.</div>`;
-
-  list.querySelectorAll('.craft-row').forEach((row) => {
+function attachRowListeners(root) {
+  root.querySelectorAll('.craft-row').forEach((row) => {
     const id = row.dataset.recipeId;
     row.querySelector('[data-action="craft1"]')?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -264,7 +304,6 @@ export function renderCraftPanel() {
       craftItem(id, maxCraftable(RECIPES.find((r) => r.id === id)));
     });
 
-    // Tablet üçün: uzun basma ilə tooltip göstər
     row.addEventListener('touchstart', () => {
       longPressTimer = setTimeout(() => row.classList.add('show-tooltip'), 400);
     }, { passive: true });
@@ -273,6 +312,35 @@ export function renderCraftPanel() {
       setTimeout(() => row.classList.remove('show-tooltip'), 1200);
     });
   });
+}
+
+export function renderCraftPanel() {
+  const list = document.getElementById('craft-list');
+  if (!list) return;
+
+  const recipes = filteredRecipes();
+  const basic = recipes.filter((r) => !r.requiresTable);
+  const advanced = recipes.filter((r) => r.requiresTable);
+  const nearTable = nearTableNow();
+
+  let html = '';
+
+  html += `<div class="craft-section-title">🖐️ Sadə hazırlama (masasız)</div>`;
+  html += basic.length
+    ? `<div class="craft-grid">${basic.map(buildRowHtml).join('')}</div>`
+    : `<div class="craft-empty">Heç nə tapılmadı.</div>`;
+
+  html += `<div class="craft-section-title">🛠️ Masa ilə hazırlama</div>`;
+  if (!nearTable) {
+    html += `<div class="craft-locked">🔒 Yaxınlıqda əşya yapma masası yoxdur. Onu sadə bölmədən hazırla və yerə qoy.</div>`;
+  } else if (advanced.length) {
+    html += `<div class="craft-grid">${advanced.map(buildRowHtml).join('')}</div>`;
+  } else {
+    html += `<div class="craft-empty">Heç nə tapılmadı.</div>`;
+  }
+
+  list.innerHTML = html;
+  attachRowListeners(list);
 }
 
 function renderTabsAndSearch() {
@@ -336,5 +404,8 @@ export function initCraftSystem() {
   });
 }
 
-// Modul yüklənən kimi hadisə dinləyicilərini quraşdır
+// showHint actions.js-dədir — dövri asılılıq yaranmasın deyə birbaşa import edirik
+// (actions.js craft.js-i import etmir, ona görə təhlükəsizdir).
+import { showHint } from './actions.js';
+
 initCraftSystem();

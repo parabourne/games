@@ -51,6 +51,7 @@ export const materials = {
   leaves: new THREE.MeshLambertMaterial({ color: 0x2e8b57 }),
   sand: new THREE.MeshLambertMaterial({ color: 0xe6d28a }),
   bed: new THREE.MeshLambertMaterial({ color: 0xd9534f }),
+  crafting_table: new THREE.MeshLambertMaterial({ color: 0x7a5230 }),
 };
 
 function geometryFor(type) {
@@ -70,6 +71,7 @@ const capacities = {
   leaves: 8000,
   sand: SIZE * SIZE,
   bed: 200,
+  crafting_table: 200,
 };
 
 export const instancedMeshes = {};

@@ -300,3 +300,34 @@
 #craft-toggle-btn:active {
   transform: scale(0.94);
 }
+/* ---------- BÖLMƏ BAŞLIQLARI (masasız / masa ilə) ---------- */
+.craft-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #d9a441;
+  margin: 14px 4px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.craft-section-title:first-child {
+  margin-top: 2px;
+}
+
+.craft-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.craft-locked {
+  text-align: center;
+  color: #a89684;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed #5a4632;
+  border-radius: 10px;
+  padding: 20px 14px;
+  font-size: 0.85rem;
+  margin-bottom: 6px;
+}
