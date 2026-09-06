@@ -1,246 +1,166 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>minecraft-clone</title>
-    <link rel="stylesheet" href="/src/craft.css" />
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: #000; touch-action: none; }
-      #app { width: 100%; height: 100%; }
-      #crosshair {
-        position: fixed; top: 50%; left: 50%;
-        width: 4px; height: 4px; background: white;
-        transform: translate(-50%, -50%);
-        border-radius: 50%;
-        pointer-events: none;
-        z-index: 10;
-      }
-      #info {
-        position: fixed; bottom: 10px; left: 10px;
-        color: white; font-family: monospace; font-size: 13px;
-        background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px;
-        z-index: 10;
-      }
-      #hotbar {
-        position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%);
-        display: flex; gap: 6px; z-index: 30;
-      }
-      .slot {
-        width: 44px; height: 44px;
-        background: rgba(0,0,0,0.5);
-        border: 2px solid rgba(255,255,255,0.3);
-        border-radius: 6px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 22px;
-        cursor: pointer;
-      }
-      .slot.active { border-color: white; background: rgba(255,255,255,0.2); }
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oyunlar</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
 
-      /* ---- İNVENTAR PANELİ (sağ yuxarı künc) ---- */
-      #inventory-panel {
-        position: fixed; top: 10px; right: 10px;
-        display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
-        z-index: 30;
-      }
-      #inventory-list {
-        display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end;
-        max-width: 220px;
-      }
-      .inv-chip {
-        background: rgba(0,0,0,0.55); color: white;
-        font-family: monospace; font-size: 14px;
-        padding: 4px 10px; border-radius: 6px;
-        border: 1px solid rgba(255,255,255,0.25);
-      }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #fdf6ec 0%, #eaf4ff 50%, #eefcf3 100%);
+      color: #2b2d3a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
 
-      /* ---- CRAFT (EMALAT) PANELİ ----
-         Diqqət: panelin özünün görünüşü artıq /src/craft.css faylında
-         idarə olunur (#craft-panel, .craft-row, .craft-btn və s.).
-         Burada YALNIZ ümumi "hidden" utility saxlanılıb, köhnə
-         toqquşan qaydalar silinib. ---- */
-      .hidden { display: none !important; }
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
 
-      /* ---- TOXUNMA İDARƏETMƏ (yalnız touch cihazlarda görünür) ---- */
-      #touch-controls { display: none; }
-      body.touch-device #touch-controls { display: block; }
-      body.touch-device #info { display: none; }
+    .header h1 {
+      font-size: 2.4rem;
+      margin: 0;
+      background: linear-gradient(90deg, #ff6b6b, #f7b733, #4ecdc4);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-weight: 800;
+    }
 
-      #joystick-zone {
-        position: fixed; bottom: 30px; left: 30px;
-        width: 130px; height: 130px;
-        border-radius: 50%;
-        background: rgba(255,255,255,0.15);
-        border: 2px solid rgba(255,255,255,0.3);
-        z-index: 20;
-        touch-action: none;
-      }
-      #joystick-knob {
-        position: absolute; top: 50%; left: 50%;
-        width: 55px; height: 55px;
-        margin: -27px 0 0 -27px;
-        border-radius: 50%;
-        background: rgba(255,255,255,0.4);
-        border: 2px solid rgba(255,255,255,0.6);
-        pointer-events: none;
-      }
-      #look-zone {
-        position: fixed; top: 0; right: 0;
-        width: 55%; height: 100%;
-        z-index: 15;
-        touch-action: none;
-      }
-      #action-buttons {
-        position: fixed; bottom: 100px; right: 25px;
-        display: flex; flex-direction: column; gap: 14px;
-        z-index: 20;
-      }
-      .action-btn {
-        width: 64px; height: 64px;
-        border-radius: 50%;
-        background: rgba(0,0,0,0.5);
-        border: 2px solid rgba(255,255,255,0.4);
-        color: white;
-        font-size: 12px;
-        font-family: sans-serif;
-        display: flex; align-items: center; justify-content: center;
-        text-align: center;
-        touch-action: none;
-      }
-      /* ---- TULLANMA DÜYMƏSİ: sağ tərəfə, "Sındır" düyməsinin soluna
-         köçürüldü. Əvvəl joystick-in yanında (sol tərəfdə) idi və hərəkət
-         barmağı ilə üst-üstə düşürdü — indi sağ baş barmaqla əlçatandır. ---- */
-      #jump-btn {
-        position: fixed; bottom: 100px; right: 100px;
-        width: 64px; height: 64px;
-        border-radius: 50%;
-        background: rgba(0,0,0,0.5);
-        border: 2px solid rgba(255,255,255,0.4);
-        color: white;
-        font-size: 12px;
-        font-family: sans-serif;
-        display: flex; align-items: center; justify-content: center;
-        z-index: 20;
-        touch-action: none;
-      }
-      #touch-hint {
-        position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-        color: white; font-family: sans-serif; font-size: 12px;
-        background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 6px;
-        z-index: 10;
-      }
+    .header p {
+      margin-top: 10px;
+      color: #6b6f80;
+      font-size: 1.05rem;
+    }
 
-      /* ---- GECƏ/GÜNDÜZ GÖSTƏRİCİSİ ---- */
-      #daynight-indicator {
-        position: fixed; top: 10px; right: 10px;
-        color: white; font-family: sans-serif; font-size: 14px;
-        background: rgba(0,0,0,0.55); padding: 6px 14px; border-radius: 6px;
-        z-index: 30;
-      }
-      /* İnventar paneli ilə üst-üstə düşməsin deyə, toxunma cihazında
-         inventar panelinin altına, masaüstündə isə öz yerində qalır. */
-      body.touch-device #daynight-indicator {
-        top: 46px;
-      }
+    .game-list {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 900px;
+    }
 
-      /* ---- MÜVƏQQƏTİ İPUCU MESAJI ---- */
-      #hint {
-        position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
-        color: white; font-family: sans-serif; font-size: 14px;
-        background: rgba(0,0,0,0.65); padding: 8px 16px; border-radius: 8px;
-        z-index: 35;
-        transition: opacity 0.2s;
-      }
+    .game-card {
+      position: relative;
+      width: 220px;
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 28px 22px;
+      text-decoration: none;
+      color: #2b2d3a;
+      box-shadow: 0 8px 20px rgba(43, 45, 58, 0.08);
+      border: 1px solid rgba(43, 45, 58, 0.06);
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 12px;
+      overflow: hidden;
+    }
 
-      /* ---- GAME OVER EKRANI ---- */
-      #game-over-screen {
-        position: fixed; inset: 0;
-        background: rgba(20,0,0,0.85);
-        display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        gap: 18px;
-        z-index: 100;
-      }
-      #game-over-screen h1 {
-        color: #ff5555; font-family: sans-serif; font-size: 42px;
-        letter-spacing: 2px;
-      }
-      #restart-btn {
-        padding: 12px 28px;
-        font-size: 16px; font-family: sans-serif;
-        background: #d9534f; color: white;
-        border: none; border-radius: 8px;
-        cursor: pointer;
-      }
-      #restart-btn:hover { background: #c9302c; }
+    .game-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 5px;
+      background: linear-gradient(90deg, #ff6b6b, #f7b733, #4ecdc4);
+    }
 
-      /* ---- YATMAQ DÜYMƏSİ (yalnız toxunma cihazlarında) ---- */
-      #sleep-btn {
-        position: fixed; bottom: 100px; right: 175px;
-        width: 64px; height: 64px;
-        border-radius: 50%;
-        background: rgba(0,0,0,0.5);
-        border: 2px solid rgba(255,255,255,0.4);
-        color: white; font-size: 22px;
-        display: flex; align-items: center; justify-content: center;
-        z-index: 20;
-        touch-action: none;
-      }
-      body:not(.touch-device) #sleep-btn { display: none; }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-    <div id="crosshair"></div>
-    <div id="info">WASD - hərəkət | Space - tullanmaq | Sol klik - blok sındır / heyvana (zombiyə) vur | Sağ klik - blok qoy | Təkər - zoom | 1-5 - blok seç | B - yataq yanında yatmaq</div>
+    .game-card:hover {
+      transform: translateY(-8px) scale(1.03);
+      box-shadow: 0 16px 30px rgba(43, 45, 58, 0.15);
+    }
 
-    <div id="daynight-indicator">☀️ Gündüz</div>
-    <div id="hint" class="hidden"></div>
+    .game-icon {
+      font-size: 2.6rem;
+      line-height: 1;
+    }
 
-    <div id="inventory-panel">
-      <div id="inventory-list"></div>
+    .game-name {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .game-desc {
+      font-size: 0.85rem;
+      color: #8a8d9c;
+    }
+
+    .game-card.disabled {
+      opacity: 0.55;
+      cursor: default;
+      pointer-events: none;
+      border-style: dashed;
+    }
+
+    .game-card.disabled .game-desc {
+      font-style: italic;
+    }
+
+    footer {
+      margin-top: 60px;
+      text-align: center;
+      color: #8a8d9c;
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: #4ecdc4;
+      text-decoration: none;
+      font-weight: 600;
+      transition: color 0.2s;
+    }
+
+    footer a:hover {
+      color: #ff6b6b;
+    }
+
+    footer .author-line {
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>🎮 Oyun Mərkəzi</h1>
+    <p>Oynamaq istədiyin oyunu seç</p>
+  </div>
+
+  <div class="game-list">
+    <a class="game-card" href="/minecraft.html">
+      <div class="game-icon">🧱</div>
+      <div class="game-name">Minecraft Clone</div>
+      <div class="game-desc">Blok dünyasında yarat, tikin, sağ qal</div>
+    </a>
+
+    <div class="game-card disabled">
+      <div class="game-icon">➕</div>
+      <div class="game-name">Tezliklə...</div>
+      <div class="game-desc">Yeni oyun burada görünəcək</div>
     </div>
+  </div>
 
-    <div id="hotbar">
-      <div class="slot active" data-type="grass">🟩</div>
-      <div class="slot" data-type="dirt">🟫</div>
-      <div class="slot" data-type="stone">⬜</div>
-      <div class="slot" data-type="wood">🪵</div>
-      <div class="slot" data-type="sand">🟨</div>
-      <div class="slot" data-type="bed">🛏️</div>
+  <footer>
+    <div>Hazırladı: <a href="https://github.com/parabourne" target="_blank" rel="noopener">parabourne</a></div>
+    <div class="author-line">
+      <a href="mailto:bybourne@gmail.com">bybourne@gmail.com</a>
     </div>
+  </footer>
 
-    <div id="craft-toggle-btn" title="Craft paneli (E)">🛠️</div>
-    <div id="craft-panel" class="hidden">
-      <div class="craft-header">
-        <h2>🛠️ Hazırlama (E - bağla/aç)</h2>
-        <input id="craft-search" placeholder="Axtar..." />
-      </div>
-      <div id="craft-tabs"></div>
-      <div id="craft-list"></div>
-    </div>
-
-    <div id="touch-controls">
-      <div id="touch-hint">Sol tərəf – bax | Sağ tərəf – bax/fırlat | Düymələr – sındır/qoy/tulan</div>
-      <div id="look-zone"></div>
-      <div id="joystick-zone">
-        <div id="joystick-knob"></div>
-      </div>
-      <div id="jump-btn">Tullan</div>
-      <div id="action-buttons">
-        <div class="action-btn" id="break-btn">Sındır</div>
-        <div class="action-btn" id="place-btn">Qoy</div>
-      </div>
-      <div id="sleep-btn" title="Yat (yataq yanında, gecə)">🛏️</div>
-    </div>
-
-    <div id="game-over-screen" class="hidden">
-      <h1>💀 GAME OVER</h1>
-      <button id="restart-btn">Yenidən başla</button>
-    </div>
-
-    <script type="module" src="/src/main.js"></script>
-  </body>
+</body>
 </html>
