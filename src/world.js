@@ -25,19 +25,45 @@ sun.shadow.camera.top = 40;
 sun.shadow.camera.bottom = -40;
 scene.add(sun);
 
+// ---------- BLOK GEOMETRİYALARI ----------
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+
+// YENİ: Yataq artıq tam kub deyil — yastı, çarpayı formalı bir geometriyadır.
+// Hündürlüyü 0.55 (əvəzinə 1), aşağı tərəfdən adi blokların altı ilə eyni
+// səviyyədə (y-0.5) dayanması üçün geometriyanı özü daxilində aşağı sürüşdürürük.
+const BED_HEIGHT = 0.55;
+const bedGeo = new THREE.BoxGeometry(1, BED_HEIGHT, 1);
+bedGeo.translate(0, -(1 - BED_HEIGHT) / 2, 0);
+
 // ---------- BLOK MATERİALLARI ----------
+// YENİ: Ot (grass) bloku artıq tək rəngli deyil — üstü yaşıl, yanları/altı
+// isə torpaq rənginə yaxın olur (klassik Minecraft görünüşü). BoxGeometry
+// üzləri default olaraq bu ardıcıllıqla qruplaşır: [+x, -x, +y(üst),
+// -y(alt), +z, -z] — ona görə materials array-i bu sıra ilə verilir.
+const grassSideMat = new THREE.MeshLambertMaterial({ color: 0x6f9c52 });
+const grassTopMat = new THREE.MeshLambertMaterial({ color: 0x4caf50 });
+const grassBottomMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+const grassMaterials = [
+  grassSideMat, grassSideMat, // +x, -x
+  grassTopMat,                // +y (üst)
+  grassBottomMat,              // -y (alt)
+  grassSideMat, grassSideMat, // +z, -z
+];
+
 const materials = {
-  grass: new THREE.MeshLambertMaterial({ color: 0x4caf50 }),
+  grass: grassMaterials,
   dirt: new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
   stone: new THREE.MeshLambertMaterial({ color: 0x888888 }),
   wood: new THREE.MeshLambertMaterial({ color: 0x6b4423 }),
   sand: new THREE.MeshLambertMaterial({ color: 0xe6d28a }),
-  // Craft edilən yataq — sadəlik üçün tək-blok rəngli kub kimi göstərilir
-  // (əsl Minecraft-dakı 2-hissəli yataq modeli deyil)
+  // Craft edilən yataq — indi yastı çarpayı həndəsəsi ilə göstərilir
   bed: new THREE.MeshLambertMaterial({ color: 0xd9534f }),
 };
 
-const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+// Hər blok növü üçün hansı geometriyanın istifadə olunacağını təyin edir
+function geometryFor(type) {
+  return type === 'bed' ? bedGeo : boxGeo;
+}
 
 // ---------- DÜNYA ÖLÇÜSÜ ----------
 export const SIZE = 64;
@@ -61,7 +87,7 @@ const dummy = new THREE.Object3D();
 
 for (const type of Object.keys(materials)) {
   const cap = capacities[type];
-  const mesh = new THREE.InstancedMesh(boxGeo, materials[type], cap);
+  const mesh = new THREE.InstancedMesh(geometryFor(type), materials[type], cap);
   mesh.count = 0;
   mesh.castShadow = true;
   mesh.receiveShadow = true;

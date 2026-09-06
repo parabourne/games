@@ -68,7 +68,6 @@ function createCow() {
   return group;
 }
 
-// ---------- YENİ: QOYUN ----------
 function createSheep() {
   const group = new THREE.Group();
   const woolMat = new THREE.MeshLambertMaterial({ color: 0xf5f5f0 });
@@ -103,7 +102,6 @@ const BUILDERS = { pig: createPig, cow: createCow, sheep: createSheep };
 // ---------- CAN VƏ DROP CƏDVƏLİ ----------
 const HEALTH = { pig: 3, cow: 4, sheep: 2 };
 
-// hər item üçün { item, min, max } - ölüncə bu aralıqda təsadüfi say düşür
 const DROPS = {
   pig: [{ item: 'meat', min: 1, max: 2 }],
   cow: [
@@ -141,32 +139,60 @@ function spawnAnimal(type, x, z) {
     stateTimer: Math.random() * 2,
     walkAngle: Math.random() * Math.PI * 2,
   };
-  // Raycast heyvana dəyəndə mesh-dən birbaşa record-a çatmaq üçün:
   mesh.userData.animalRef = record;
 
   animals.push(record);
 }
 
-for (let i = 0; i < 12; i++) {
+function randomSpawnPos() {
   const x = (Math.random() - 0.5) * (SIZE - 4);
   const z = (Math.random() - 0.5) * (SIZE - 4);
-  spawnAnimal('pig', x, z);
+  return { x, z };
 }
-for (let i = 0; i < 10; i++) {
-  const x = (Math.random() - 0.5) * (SIZE - 4);
-  const z = (Math.random() - 0.5) * (SIZE - 4);
-  spawnAnimal('cow', x, z);
-}
-for (let i = 0; i < 10; i++) {
-  const x = (Math.random() - 0.5) * (SIZE - 4);
-  const z = (Math.random() - 0.5) * (SIZE - 4);
-  spawnAnimal('sheep', x, z);
+
+// ---------- İLK POPULYASİYA ----------
+// YENİ: Bu hədəf saylar həm başlanğıc doldurma, həm də sonrakı "respawn"
+// (bərpa) sistemi üçün istifadə olunur.
+const TARGET_COUNTS = { pig: 12, cow: 10, sheep: 10 };
+
+for (const [type, count] of Object.entries(TARGET_COUNTS)) {
+  for (let i = 0; i < count; i++) {
+    const { x, z } = randomSpawnPos();
+    spawnAnimal(type, x, z);
+  }
 }
 
 const ANIMAL_SPEED = 1.2;
 const WORLD_HALF = SIZE / 2 - 0.6;
 
+// ---------- YENİ: HEYVAN RESPAWN (BƏRPA) SİSTEMİ ----------
+// Bütün heyvanları öldürüb "dünya boşalanda" yeni heyvan gəlmirdi.
+// İndi hər RESPAWN_INTERVAL saniyədən bir, hər növün sayı öz hədəfindən
+// (TARGET_COUNTS) az olduğu halda TƏK bir yeni heyvan doğulur — beləliklə
+// populyasiya tamamilə tükənmir, amma partlayış şəklində gəlmir.
+const RESPAWN_INTERVAL = 8; // saniyə
+let respawnTimer = RESPAWN_INTERVAL;
+
+function tryRespawn() {
+  for (const [type, target] of Object.entries(TARGET_COUNTS)) {
+    const current = animals.filter((a) => a.type === type).length;
+    if (current < target) {
+      const { x, z } = randomSpawnPos();
+      spawnAnimal(type, x, z);
+      // Frame başına bütün növləri eyni anda doldurmuruq —
+      // hər çağırışda maksimum 1 heyvan əlavə olunur ki, tədricən dolsun.
+      break;
+    }
+  }
+}
+
 export function updateAnimals(dt) {
+  respawnTimer -= dt;
+  if (respawnTimer <= 0) {
+    respawnTimer = RESPAWN_INTERVAL;
+    tryRespawn();
+  }
+
   for (const a of animals) {
     a.stateTimer -= dt;
     if (a.stateTimer <= 0) {
@@ -199,9 +225,7 @@ export function updateAnimals(dt) {
   }
 }
 
-// ---------- YENİ: HEYVANA ZƏRBƏ ----------
-// record: animals[] içindəki obyekt, amount: neçə can azalsın
-// Qayıdış: heyvan ölübsə drop siyahısı ([{item, count}]), yox əgər sağdırsa null
+// ---------- HEYVANA ZƏRBƏ ----------
 export function damageAnimal(record, amount = 1) {
   record.health -= amount;
   if (record.health > 0) return null;
