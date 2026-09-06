@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Kosmik Birləşmə</title>
+<style>
+  :root{
+    --bg-deep: #0b0a1f;
+    --bg-nebula: #241a4a;
+    --panel: #171335;
+    --line: rgba(255,255,255,0.08);
+    --text: #eae7ff;
+    --text-dim: #9089c2;
+    --accent: #f9c74f;
+    --danger: #ef6f6c;
+  }
+  *{ box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0; height:100%;
+    background:
+      radial-gradient(1px 1px at 20% 30%, #ffffff55 50%, transparent 51%),
+      radial-gradient(1px 1px at 70% 15%, #ffffff44 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 85% 60%, #ffffff66 50%, transparent 51%),
+      radial-gradient(1px 1px at 40% 80%, #ffffff33 50%, transparent 51%),
+      radial-gradient(1px 1px at 10% 65%, #ffffff55 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 60% 45%, #ffffff44 50%, transparent 51%),
+      linear-gradient(160deg, var(--bg-deep), var(--bg-nebula) 70%, var(--bg-deep));
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI Rounded", "Segoe UI", system-ui, sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    padding: 22px 14px 40px;
+    overflow-x:hidden;
+  }
+
+  .home-link{
+    position:fixed; top:12px; left:12px; z-index:50;
+    color: var(--text-dim); text-decoration:none;
+    font-size:13px; padding:7px 12px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--line); border-radius:8px;
+  }
+  .home-link:hover{ color: var(--text); background: rgba(255,255,255,0.1); }
+
+  h1{
+    margin: 30px 0 4px;
+    font-size: clamp(24px, 6vw, 32px);
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .tagline{
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-bottom: 20px;
+    text-align:center;
+    max-width: 340px;
+  }
+
+  .scorebar{
+    display:flex; gap:10px; margin-bottom:16px;
+  }
+  .score-box{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 18px;
+    text-align:center;
+    min-width: 84px;
+  }
+  .score-box .label{ font-size:11px; color:var(--text-dim); }
+  .score-box .value{ font-size:20px; font-weight:700; }
+
+  .board-wrap{
+    position:relative;
+  }
+  .board{
+    display:grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 8px;
+    width: min(90vw, 380px);
+    height: min(90vw, 380px);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  }
+  .cell{
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    display:flex; align-items:center; justify-content:center;
+    font-size: clamp(20px, 6vw, 28px);
+    position: relative;
+    overflow:hidden;
+  }
+  .cell.tile{
+    font-weight:800;
+    border-radius: 10px;
+    animation: pop 0.16s ease-out;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.12);
+  }
+  .cell.merged{
+    animation: bounce 0.22s ease-out;
+  }
+  .cell.obstacle{
+    background: repeating-linear-gradient(45deg, #3a3560, #3a3560 6px, #2c2850 6px, #2c2850 12px);
+    color: var(--text-dim);
+    font-size: 14px;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cell.obstacle .turns{
+    font-size: 11px;
+    font-weight: 700;
+  }
+  @keyframes pop{ from{ transform: scale(0.5); opacity:0.4; } to{ transform: scale(1); opacity:1; } }
+  @keyframes bounce{ 0%{ transform: scale(1); } 45%{ transform: scale(1.18); } 100%{ transform: scale(1); } }
+
+  .hint{
+    margin-top: 18px;
+    color: var(--text-dim);
+    font-size: 12.5px;
+    text-align:center;
+    max-width: 340px;
+    line-height:1.5;
+  }
+
+  .controls-row{
+    margin-top: 18px;
+    display:flex; gap: 10px;
+  }
+  button.restart{
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 9px 18px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor:pointer;
+  }
+  button.restart:hover{ background: rgba(255,255,255,0.08); }
+
+  .overlay{
+    position:fixed; inset:0;
+    background: rgba(8,7,20,0.86);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: 14px;
+    z-index: 60;
+    text-align:center;
+    padding: 20px;
+  }
+  .overlay.hidden{ display:none; }
+  .overlay .big-emoji{ font-size: 56px; }
+  .overlay h2{ margin:0; font-size: 26px; }
+  .overlay p{ color: var(--text-dim); margin:0; max-width:280px; }
+  .overlay-buttons{ display:flex; gap:10px; margin-top:6px; }
+  .overlay-buttons a, .overlay-buttons button{
+    padding: 10px 20px; border-radius: 10px; font-size: 14px;
+    cursor:pointer; text-decoration:none;
+  }
+  .btn-primary{ background: var(--accent); color:#241a02; border:none; font-weight:700; }
+  .btn-secondary{ background:transparent; border:1px solid var(--line); color:var(--text); }
+</style>
+</head>
+<body>
+
+  <a href="/index.html" class="home-link">🏠 Menyu</a>
+
+  <h1>Kosmik Birləşmə</h1>
+  <p class="tagline">Eyni rəqəmləri sürüşdürüb birləşdir, 2-dən 4096-a qədər böyü. Diqqət — asteroidlər yolunu kəsə bilər.</p>
+
+  <div class="scorebar">
+    <div class="score-box">
+      <div class="label">Xal</div>
+      <div class="value" id="score">0</div>
+    </div>
+    <div class="score-box">
+      <div class="label">Ən yaxşı</div>
+      <div class="value" id="best">0</div>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="controls-row">
+    <button class="restart" id="restart">🔄 Yenidən başla</button>
+  </div>
+
+  <p class="hint">Ox düymələri / WASD ilə (masaüstündə), sürüşdürmə (mobil/tablet) ilə idarə et. Eyni rəqəmli iki xana yan-yana gələndə birləşib ikiqat böyüyür.</p>
+
+  <div class="overlay hidden" id="overlay">
+    <div class="big-emoji" id="overlay-emoji">🏆</div>
+    <h2 id="overlay-title">Uğurlar!</h2>
+    <p id="overlay-text"></p>
+    <div class="overlay-buttons">
+      <button class="btn-primary" id="overlay-restart">Yenidən başla</button>
+      <a class="btn-secondary" href="/index.html">Menyuya qayıt</a>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const SIZE = 5;
+  const LEVELS = [
+    { value:2,    bg:'#7dd3fc', fg:'#0c344d' },
+    { value:4,    bg:'#5eead4', fg:'#0c3b34' },
+    { value:8,    bg:'#86efac', fg:'#0f3d1f' },
+    { value:16,   bg:'#bef264', fg:'#2b3d05' },
+    { value:32,   bg:'#fde047', fg:'#453b04' },
+    { value:64,   bg:'#fdba74', fg:'#4a2705' },
+    { value:128,  bg:'#fb923c', fg:'#452004' },
+    { value:256,  bg:'#f87171', fg:'#450a0a' },
+    { value:512,  bg:'#f472b6', fg:'#4a0d2e' },
+    { value:1024, bg:'#c084fc', fg:'#33064f' },
+    { value:2048, bg:'#818cf8', fg:'#1e1b4b' },
+    { value:4096, bg:'#f9c74f', fg:'#3a2a02' },
+  ];
+  const WIN_LEVEL = LEVELS.length; // 7 -> tac
+  const OBSTACLE_EVERY = 7;
+  const OBSTACLE_LIFE = 3;
+
+  let grid, score, best, moveCount, gameOver, won, continued;
+
+  const boardEl = document.getElementById('board');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const overlayEl = document.getElementById('overlay');
+
+  function emptyGrid(){
+    return Array.from({length:SIZE}, () => Array.from({length:SIZE}, () => null));
+  }
+
+  function init(){
+    grid = emptyGrid();
+    score = 0;
+    best = best || 0;
+    moveCount = 0;
+    gameOver = false;
+    won = false;
+    continued = false;
+    spawnTile(); spawnTile();
+    render(true);
+  }
+
+  function randomEmptyCell(){
+    const empties = [];
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(grid[r][c]===null) empties.push([r,c]);
+    if(empties.length===0) return null;
+    return empties[Math.floor(Math.random()*empties.length)];
+  }
+
+  function spawnTile(){
+    const pos = randomEmptyCell();
+    if(!pos) return;
+    const [r,c] = pos;
+    const level = Math.random() < 0.85 ? 1 : 2;
+    grid[r][c] = { type:'tile', level, isNew:true };
+  }
+
+  function spawnObstacle(){
+    const pos = randomEmptyCell();
+    if(!pos) return;
+    const [r,c] = pos;
+    grid[r][c] = { type:'obstacle', turns: OBSTACLE_LIFE };
+  }
+
+  function cloneGrid(g){
+    return g.map(row => row.map(cell => cell ? {...cell} : null));
+  }
+
+  function gridsEqual(a,b){
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+      const x=a[r][c], y=b[r][c];
+      if(!x && !y) continue;
+      if(!x || !y) return false;
+      if(x.type!==y.type) return false;
+      if(x.type==='tile' && x.level!==y.level) return false;
+      if(x.type==='obstacle' && x.turns!==y.turns) return false;
+    }
+    return true;
+  }
+
+  // Merge one "line" (array of cells in the direction of travel, index 0 = front),
+  // respecting obstacles as fixed dividers.
+  function processLine(line){
+    const result = new Array(line.length).fill(null);
+    let scoreGained = 0, merges = 0;
+
+    let segStart = 0;
+    function flushSegment(segEndExclusive){
+      const seg = [];
+      for(let i=segStart;i<segEndExclusive;i++) seg.push(line[i] && line[i].type==='tile' ? line[i].level : null);
+      const filtered = seg.filter(v => v!==null);
+      const merged = [];
+      let i=0;
+      while(i<filtered.length){
+        if(i+1<filtered.length && filtered[i]===filtered[i+1]){
+          const newLevel = filtered[i]+1;
+          merged.push({level:newLevel, merged:true});
+          scoreGained += newLevel * 10;
+          merges++;
+          i+=2;
+        } else {
+          merged.push({level:filtered[i], merged:false});
+          i+=1;
+        }
+      }
+      for(let k=0;k<seg.length;k++){
+        if(k<merged.length) result[segStart+k] = { type:'tile', level: merged[k].level, merged: merged[k].merged };
+        else result[segStart+k] = null;
+      }
+    }
+
+    for(let i=0;i<line.length;i++){
+      if(line[i] && line[i].type==='obstacle'){
+        flushSegment(i);
+        result[i] = { type:'obstacle', turns: line[i].turns };
+        segStart = i+1;
+      }
+    }
+    flushSegment(line.length);
+
+    return { line: result, scoreGained, merges };
+  }
+
+  function getLine(dir, index){
+    const line = [];
+    for(let i=0;i<SIZE;i++){
+      if(dir==='left') line.push(grid[index][i]);
+      else if(dir==='right') line.push(grid[index][SIZE-1-i]);
+      else if(dir==='up') line.push(grid[i][index]);
+      else if(dir==='down') line.push(grid[SIZE-1-i][index]);
+    }
+    return line;
+  }
+
+  function setLine(dir, index, line){
+    for(let i=0;i<SIZE;i++){
+      const val = line[i];
+      if(dir==='left') grid[index][i] = val;
+      else if(dir==='right') grid[index][SIZE-1-i] = val;
+      else if(dir==='up') grid[i][index] = val;
+      else if(dir==='down') grid[SIZE-1-i][index] = val;
+    }
+  }
+
+  function move(dir){
+    if(gameOver) return;
+    const before = cloneGrid(grid);
+    let totalScore = 0, totalMerges = 0;
+
+    for(let idx=0; idx<SIZE; idx++){
+      const line = getLine(dir, idx);
+      const { line: newLine, scoreGained, merges } = processLine(line);
+      setLine(dir, idx, newLine);
+      totalScore += scoreGained;
+      totalMerges += merges;
+    }
+
+    const changed = !gridsEqual(before, grid);
+    if(!changed) return;
+
+    if(totalMerges > 1) totalScore = Math.round(totalScore * (1 + 0.25*(totalMerges-1)));
+    score += totalScore;
+    if(score > best) best = score;
+
+    moveCount++;
+    // tick down obstacles
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+      const cell = grid[r][c];
+      if(cell && cell.type==='obstacle'){
+        cell.turns -= 1;
+        if(cell.turns <= 0) grid[r][c] = null;
+      }
+    }
+
+    if(moveCount % OBSTACLE_EVERY === 0){
+      spawnObstacle();
+    } else {
+      spawnTile();
+    }
+
+    checkWinLose();
+    render(false);
+  }
+
+  function checkWinLose(){
+    if(!continued){
+      for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+        const cell = grid[r][c];
+        if(cell && cell.type==='tile' && cell.level >= WIN_LEVEL){
+          won = true;
+          showOverlay(true);
+          return;
+        }
+      }
+    }
+    // lose check: no empty cell and no possible merge
+    let hasEmpty = false;
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(grid[r][c]===null) hasEmpty = true;
+    if(hasEmpty) return;
+
+    let canMerge = false;
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+      const cell = grid[r][c];
+      if(!cell || cell.type!=='tile') continue;
+      const neighbors = [[r+1,c],[r-1,c],[r,c+1],[r,c-1]];
+      for(const [nr,nc] of neighbors){
+        if(nr<0||nr>=SIZE||nc<0||nc>=SIZE) continue;
+        const n = grid[nr][nc];
+        if(n && n.type==='tile' && n.level===cell.level){ canMerge = true; }
+      }
+    }
+    if(!canMerge){
+      gameOver = true;
+      showOverlay(false);
+    }
+  }
+
+  function showOverlay(isWin){
+    const emojiEl = document.getElementById('overlay-emoji');
+    const titleEl = document.getElementById('overlay-title');
+    const textEl = document.getElementById('overlay-text');
+    if(isWin){
+      emojiEl.textContent = '🏆';
+      titleEl.textContent = '4096-a çatdın!';
+      textEl.textContent = 'İstəsən davam edib daha yüksək xal toplaya bilərsən, ya da yenidən başla.';
+    } else {
+      emojiEl.textContent = '💥';
+      titleEl.textContent = 'Oyun bitdi';
+      textEl.textContent = 'Artıq heç bir xananı birləşdirmək mümkün deyil. Xalın: ' + score;
+    }
+    overlayEl.classList.remove('hidden');
+  }
+
+  function hideOverlay(){ overlayEl.classList.add('hidden'); }
+
+  function render(initial){
+    boardEl.innerHTML = '';
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        const cell = grid[r][c];
+        const div = document.createElement('div');
+        div.className = 'cell';
+        if(cell){
+          if(cell.type==='tile'){
+            div.classList.add('tile');
+            if(cell.merged) div.classList.add('merged');
+            const lvl = LEVELS[Math.min(cell.level, LEVELS.length)-1] || LEVELS[LEVELS.length-1];
+            div.textContent = lvl.value;
+            div.style.background = lvl.bg;
+            div.style.color = lvl.fg;
+            if(lvl.value >= 1000) div.style.fontSize = 'clamp(15px, 4.6vw, 20px)';
+          } else if(cell.type==='obstacle'){
+            div.classList.add('obstacle');
+            div.innerHTML = '☄️💥<span class="turns">' + cell.turns + '</span>';
+          }
+        }
+        boardEl.appendChild(div);
+      }
+    }
+    scoreEl.textContent = score;
+    bestEl.textContent = best;
+  }
+
+  // keyboard controls
+  window.addEventListener('keydown', (e) => {
+    const map = {
+      ArrowLeft:'left', a:'left', A:'left',
+      ArrowRight:'right', d:'right', D:'right',
+      ArrowUp:'up', w:'up', W:'up',
+      ArrowDown:'down', s:'down', S:'down'
+    };
+    if(map[e.key]){
+      e.preventDefault();
+      move(map[e.key]);
+    }
+  });
+
+  // touch swipe controls
+  let touchStartX=0, touchStartY=0;
+  boardEl.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    touchStartX = t.clientX; touchStartY = t.clientY;
+  }, {passive:true});
+  boardEl.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    const absX = Math.abs(dx), absY = Math.abs(dy);
+    if(Math.max(absX,absY) < 24) return;
+    if(absX > absY) move(dx > 0 ? 'right' : 'left');
+    else move(dy > 0 ? 'down' : 'up');
+  }, {passive:true});
+
+  document.getElementById('restart').addEventListener('click', () => { hideOverlay(); init(); });
+  document.getElementById('overlay-restart').addEventListener('click', () => { hideOverlay(); init(); });
+
+  // "davam et" secret: click overlay text area on win to keep playing
+  document.getElementById('overlay-title').addEventListener('click', () => {
+    if(won){ continued = true; hideOverlay(); }
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
