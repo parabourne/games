@@ -53,13 +53,19 @@ export function removeFromInventory(item, count = 1) {
 
 export function renderInventory() {
   const el = listEl();
-  if (!el) return;
-  el.innerHTML = '';
-  for (const [item, count] of Object.entries(inventory)) {
-    if (count <= 0) continue;
-    const chip = document.createElement('div');
-    chip.className = 'inv-chip';
-    chip.textContent = `${ICONS[item] || '❔'} ${count}`;
-    el.appendChild(chip);
+  if (el) {
+    el.innerHTML = '';
+    for (const [item, count] of Object.entries(inventory)) {
+      if (count <= 0) continue;
+      const chip = document.createElement('div');
+      chip.className = 'inv-chip';
+      chip.textContent = `${ICONS[item] || '❔'} ${count}`;
+      el.appendChild(chip);
+    }
   }
+
+  // Hotbar-ın da (main.js-də idarə olunur) inventar dəyişdiyini bilməsi
+  // üçün bir hadisə göndəririk. Birbaşa import etmirik ki, main.js ilə
+  // dövri (circular) asılılıq yaranmasın.
+  window.dispatchEvent(new Event('inventory-changed'));
 }

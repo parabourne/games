@@ -23,7 +23,7 @@ import {
   damageZombie,
   updateZombies,
 } from './zombies.js';
-import { addToInventory, removeFromInventory } from './inventory.js';
+import { addToInventory, removeFromInventory, inventory } from './inventory.js';
 import { resolveMovement, isOnGround, EYE_HEIGHT } from './collision.js';
 import './craft.js'; // craft panelinin özü DOM listener-lərini burada qurur
 
@@ -34,6 +34,14 @@ if (isTouchDevice) document.body.classList.add('touch-device');
 // ---------- HOTBAR / İNVENTAR ----------
 let currentType = 'grass';
 const slots = document.querySelectorAll('.slot');
+
+// Hər slot-un orijinal ikonunu (HTML-dəki emoji) yadda saxlayırıq ki,
+// material əldə ediləndə əsl ikonu geri qaytara bilək. Material yoxdursa
+// slotun çərçivəsi qalır, sadəcə içi boşalır.
+slots.forEach((slot) => {
+  slot.dataset.icon = slot.textContent;
+});
+
 slots.forEach((slot) => {
   slot.addEventListener('click', () => selectSlot(slot));
   slot.addEventListener('touchstart', (e) => {
@@ -296,6 +304,34 @@ const BLOCK_DROPS = {
   sand: 'sand',
 };
 
+// Hotbar-dan bir blok QOYULARKƏN inventardan hansı itemin çıxılacağını
+// göstərir. 'grass' üçün ayrıca 'grass' itemi heç vaxt toplanmır (yuxarıdakı
+// BLOCK_DROPS-a görə qırılanda 'dirt' düşür), ona görə grass qoymaq da
+// 'dirt' resursunu istifadə edir — əks halda grass heç vaxt qoyula bilməzdi.
+const PLACE_REQUIRES = {
+  grass: 'dirt',
+  dirt: 'dirt',
+  stone: 'stone',
+  wood: 'wood',
+  sand: 'sand',
+  bed: 'bed',
+};
+
+// ---------- HOTBAR İKONLARININ GÖRÜNMƏSİ ----------
+// Slotun çərçivəsi həmişə qalır, amma o slot üçün lazım olan material
+// (PLACE_REQUIRES-ə görə) inventarda yoxdursa, içindəki ikon gizlədilir.
+function updateHotbarAvailability() {
+  slots.forEach((slot) => {
+    const type = slot.dataset.type;
+    const requiredItem = PLACE_REQUIRES[type] || type;
+    const hasMaterial = (inventory[requiredItem] || 0) > 0;
+    slot.textContent = hasMaterial ? slot.dataset.icon : '';
+  });
+}
+
+updateHotbarAvailability();
+window.addEventListener('inventory-changed', updateHotbarAvailability);
+
 // Raycast bir heyvanın alt-mesh-inə (body/head/leg) dəysə, qrupun özünə
 // qədər yuxarı çıxıb userData.isAnimal işarəsini axtarırıq.
 function findAnimalRoot(obj) {
@@ -370,11 +406,13 @@ function doAction(actionType) {
     if (dropItem) addToInventory(dropItem, 1);
   } else if (actionType === 'place') {
     const normal = hit.face.normal;
-    // Yataq craft edilmiş item olduğu üçün, qoymazdan əvvəl inventarda
-    // olub-olmadığını yoxlayırıq; digər bloklar (grass/dirt/stone/wood/sand)
-    // əvvəlki kimi limitsizdir.
-    if (currentType === 'bed') {
-      if (!removeFromInventory('bed', 1)) return;
+    // İNDİ BÜTÜN bloklar inventar tələb edir — əvvəlki limitsiz qoyma
+    // ləğv olundu. Hansı itemin çıxılacağı PLACE_REQUIRES xəritəsindən
+    // götürülür (grass -> dirt istisnası daxil olmaqla).
+    const requiredItem = PLACE_REQUIRES[currentType] || currentType;
+    if (!removeFromInventory(requiredItem, 1)) {
+      showHint('Kifayət qədər material yoxdur ❌');
+      return;
     }
     addBlock(bx + normal.x, by + normal.y, bz + normal.z, currentType);
   }
