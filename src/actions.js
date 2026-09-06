@@ -15,27 +15,26 @@ import { animals, damageAnimal } from './animals.js';
 import { zombies, despawnAllZombies, damageZombie } from './zombies.js';
 import { addToInventory, removeFromInventory } from './inventory.js';
 import { EYE_HEIGHT } from './collision.js';
-import { getCurrentType, PLACE_REQUIRES, isGameOver } from './controls.js';
+import { getCurrentType, isGameOver } from './controls.js';
 
 // ---------- BLOK SINDIRMA / QOYMA + HEYVANA/ZOMBİYƏ VURMA ----------
 const raycaster = new THREE.Raycaster();
 raycaster.far = 8;
 const center = new THREE.Vector2(0, 0);
 
-// Hər blok növü sındırılanda inventara nə düşdüyünü göstərir.
-// Xəritədə olmayan blok növü (məs. gələcəkdə əlavə olunan yeni bir tip)
-// sındırılanda heç nə düşmür — yeni blok əlavə etsən, bura da bir sətir yaz.
 const BLOCK_DROPS = {
   wood: 'wood',
   stone: 'stone',
   coal_ore: 'coal',
-  grass: 'dirt', // əsl Minecraft-da olduğu kimi, ot bloku torpaq buraxır
+  grass: 'dirt',
   dirt: 'dirt',
   sand: 'sand',
 };
 
-// Raycast bir heyvanın alt-mesh-inə (body/head/leg) dəysə, qrupun özünə
-// qədər yuxarı çıxıb userData.isAnimal işarəsini axtarırıq.
+// Hotbar-dan yalnız BU itemlər blok kimi yerə qoyula bilər. Bunun xaricində
+// olan itemlər (meat, coal, tools və s.) qoyula bilməz.
+const PLACEABLE_BLOCKS = new Set(['dirt', 'stone', 'wood', 'sand', 'bed']);
+
 function findAnimalRoot(obj) {
   let o = obj;
   while (o) {
@@ -45,7 +44,6 @@ function findAnimalRoot(obj) {
   return null;
 }
 
-// Eyni məntiq, zombi qrupu üçün.
 function findZombieRoot(obj) {
   let o = obj;
   while (o) {
@@ -77,7 +75,10 @@ export function doAction(actionType) {
       const record = animalRoot.userData.animalRef;
       const drops = damageAnimal(record, 1);
       if (drops) {
-        for (const d of drops) addToInventory(d.item, d.count);
+        for (const d of drops) {
+          const added = addToInventory(d.item, d.count);
+          if (!added) showHint('Hotbar dolu — əşya yerdə qaldı 📦');
+        }
       }
     }
     return; // heyvana dəyibsə, blok məntiqinə keçmirik
@@ -103,17 +104,23 @@ export function doAction(actionType) {
 
   if (actionType === 'break') {
     removeBlockByKey(k);
-    // Blok sındırılanda müvafiq resursu inventara əlavə et
     const dropItem = BLOCK_DROPS[blockType];
-    if (dropItem) addToInventory(dropItem, 1);
+    if (dropItem) {
+      const added = addToInventory(dropItem, 1);
+      if (!added) showHint('Hotbar dolu — əşya yerdə qaldı 📦');
+    }
   } else if (actionType === 'place') {
     const normal = hit.face.normal;
-    // Bütün bloklar inventar tələb edir. Hansı itemin çıxılacağı
-    // PLACE_REQUIRES xəritəsindən götürülür (grass -> dirt istisnası
-    // daxil olmaqla).
     const currentType = getCurrentType();
-    const requiredItem = PLACE_REQUIRES[currentType] || currentType;
-    if (!removeFromInventory(requiredItem, 1)) {
+    if (!currentType) {
+      showHint('Seçili slot boşdur');
+      return;
+    }
+    if (!PLACEABLE_BLOCKS.has(currentType)) {
+      showHint('Bu əşyanı qoymaq olmaz ❌');
+      return;
+    }
+    if (!removeFromInventory(currentType, 1)) {
       showHint('Kifayət qədər material yoxdur ❌');
       return;
     }
@@ -122,9 +129,6 @@ export function doAction(actionType) {
 }
 
 // ---------- GİZLƏNMƏ (BAĞLI SAHƏ) YOXLAMASI ----------
-// Sadə həndəsi yoxlama: oyunçunun 4 üfüqi tərəfindən (ayaq VƏ ya baş
-// səviyyəsində) divar olmalı, üstündə isə 3 blok məsafədə bir tavan
-// olmalıdır. Bu, tam qapalı kiçik bir daxma/otaq daxilində olmaq deməkdir.
 export function isPlayerSheltered(feet) {
   const fx = Math.round(feet.x);
   const fy = Math.round(feet.y);
@@ -147,7 +151,7 @@ export function isPlayerSheltered(feet) {
   for (const [dx, dz] of dirs) {
     const wallFeet = hasBlock(fx + dx, fy, fz + dz);
     const wallHead = hasBlock(fx + dx, fy + 1, fz + dz);
-    if (!wallFeet && !wallHead) return false; // bu tərəf açıqdır
+    if (!wallFeet && !wallHead) return false;
   }
   return true;
 }
@@ -175,9 +179,6 @@ export function showHint(text) {
 }
 
 // ---------- YATMAQ ----------
-// Uğurlu olub-olmadığını qaytarır ki, main.js (animasiya döngüsündəki
-// wasNight bayrağını idarə edən) yalnız HƏQİQƏTƏN yatıldıqda müvafiq
-// vəziyyəti sıfırlasın.
 export function attemptSleep() {
   if (isGameOver()) return false;
   if (!isNight()) {

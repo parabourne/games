@@ -1,15 +1,13 @@
 import * as THREE from 'three';
 import { camera, renderer, DEFAULT_FOV } from './world.js';
 import { resolveMovement, isOnGround, EYE_HEIGHT } from './collision.js';
-import { inventory } from './inventory.js';
+import { hotbarSlots, getIcon } from './inventory.js';
 
 // ---------- TOUCH CİHAZ TƏYİNİ ----------
 export const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 if (isTouchDevice) document.body.classList.add('touch-device');
 
 // ---------- OYUN VƏZİYYƏTİ (gameOver) ----------
-// main.js bu bayrağı idarə edir (setGameOver), amma pointer lock (bu fayl)
-// və doAction (actions.js) onu oxumalıdır — ona görə burada saxlanılır.
 let gameOver = false;
 export function isGameOver() {
   return gameOver;
@@ -18,65 +16,57 @@ export function setGameOver(value) {
   gameOver = value;
 }
 
-// ---------- HOTBAR / İNVENTAR ----------
-let currentType = 'grass';
+// ---------- HOTBAR ----------
+// Slotlar artıq sabit blok növləri deyil — topladığın əşyalar özləri
+// slot tutur. Seçilmiş slot boşdursa, getCurrentType() null qaytarır.
+const slotEls = document.querySelectorAll('.slot');
+let selectedSlotIndex = 0;
+
 export function getCurrentType() {
-  return currentType;
+  const slot = hotbarSlots[selectedSlotIndex];
+  return slot ? slot.item : null;
 }
 
-const slots = document.querySelectorAll('.slot');
+function selectSlot(index) {
+  selectedSlotIndex = index;
+  slotEls.forEach((s, i) => s.classList.toggle('active', i === index));
+}
 
-// Hər slot-un orijinal ikonunu (HTML-dəki emoji) yadda saxlayırıq ki,
-// material əldə ediləndə əsl ikonu geri qaytara bilək.
-slots.forEach((slot) => {
-  slot.dataset.icon = slot.textContent;
-});
-
-slots.forEach((slot) => {
-  slot.addEventListener('click', () => selectSlot(slot));
-  slot.addEventListener('touchstart', (e) => {
+slotEls.forEach((slotEl, index) => {
+  slotEl.addEventListener('click', () => selectSlot(index));
+  slotEl.addEventListener('touchstart', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    selectSlot(slot);
+    selectSlot(index);
   }, { passive: false });
 });
-function selectSlot(slot) {
-  slots.forEach((s) => s.classList.remove('active'));
-  slot.classList.add('active');
-  currentType = slot.dataset.type;
-}
+
 document.addEventListener('keydown', (e) => {
   const num = parseInt(e.code.replace('Digit', ''));
-  if (num >= 1 && num <= slots.length) {
-    selectSlot(slots[num - 1]);
+  if (num >= 1 && num <= slotEls.length) {
+    selectSlot(num - 1);
   }
 });
 
-// Hotbar-dan bir blok QOYULARKƏN inventardan hansı itemin çıxılacağını
-// göstərir (grass -> dirt istisnası daxil olmaqla). actions.js da eyni
-// xəritəni doAction-da istifadə edir.
-export const PLACE_REQUIRES = {
-  grass: 'dirt',
-  dirt: 'dirt',
-  stone: 'stone',
-  wood: 'wood',
-  sand: 'sand',
-  bed: 'bed',
-};
-
-// ---------- HOTBAR İKONLARININ GÖRÜNMƏSİ ----------
-// Slotun çərçivəsi həmişə qalır, amma o slot üçün lazım olan material
-// inventarda yoxdursa, içindəki ikon gizlədilir.
-function updateHotbarAvailability() {
-  slots.forEach((slot) => {
-    const type = slot.dataset.type;
-    const requiredItem = PLACE_REQUIRES[type] || type;
-    const hasMaterial = (inventory[requiredItem] || 0) > 0;
-    slot.textContent = hasMaterial ? slot.dataset.icon : '';
+// Hər slot: içində əşya varsa ikon + say göstərir, yoxdursa çərçivə qalır,
+// içi boş olur.
+function renderHotbar() {
+  slotEls.forEach((slotEl, index) => {
+    const slot = hotbarSlots[index];
+    const iconEl = slotEl.querySelector('.slot-icon');
+    const countEl = slotEl.querySelector('.slot-count');
+    if (slot) {
+      iconEl.textContent = getIcon(slot.item);
+      countEl.textContent = slot.count > 1 ? slot.count : '';
+    } else {
+      iconEl.textContent = '';
+      countEl.textContent = '';
+    }
   });
 }
-updateHotbarAvailability();
-window.addEventListener('inventory-changed', updateHotbarAvailability);
+renderHotbar();
+window.addEventListener('inventory-changed', renderHotbar);
+selectSlot(0);
 
 // ---------- POINTER LOCK (yalnız masaüstü) ----------
 let yaw = 0, pitch = 0;
@@ -108,8 +98,6 @@ document.addEventListener('keydown', (e) => (keys[e.code] = true));
 document.addEventListener('keyup', (e) => (keys[e.code] = false));
 
 // ---------- TOXUNMA İDARƏETMƏ (joystick / baxış / tullanma) ----------
-// Diqqət: sındır/qoy/yat düymələri burada YOXDUR — onlar doAction və
-// attemptSleep-ə (actions.js) ehtiyac duyduqları üçün main.js-də qurulur.
 const touchMove = { x: 0, y: 0 };
 let touchJump = false;
 
@@ -205,8 +193,6 @@ const GRAVITY = -20;
 const JUMP_SPEED = 8;
 const MOVE_SPEED = 6;
 
-// Dünyanın "boşluğuna" (heç bir blok olmayan yerə) düşərsə, oyunçunu
-// təhlükəsiz nöqtəyə qaytarmaq üçün sadə mühafizə
 const VOID_Y = -30;
 const RESPAWN_FEET = { x: 0, y: 5, z: 0 };
 
@@ -235,7 +221,6 @@ export function updateMovement(dt) {
   velocity.z = move.z;
   velocity.y += GRAVITY * dt;
 
-  // Ayaq (feet) mövqeyi kameradan hesablanır
   const feet = {
     x: camera.position.x,
     y: camera.position.y - EYE_HEIGHT,
@@ -253,25 +238,16 @@ export function updateMovement(dt) {
 
   const grounded = isOnGround(finalFeet);
 
-  // BUG FIX: 'başım bloka dəydimi' yoxlaması tullanma təyinatından ƏVVƏL
-  // olmalıdır. Əvvəlki sıralamada bu yoxlama tullanmadan SONRA gəlirdi və
-  // result.collided.y yerdə dayananda da true olduğu üçün, təzəcə təyin
-  // olunan JUMP_SPEED (müsbət) dərhal 0-a sıfırlanırdı — tullanma öz-özünü
-  // ləğv edirdi. İndi bu yoxlama yalnız BU FRAME-in artıq baş vermiş
-  // (tullanmadan əvvəlki) hərəkətinə aiddir.
   if (result.collided.y && velocity.y > 0) {
     velocity.y = 0;
   }
 
-  // Tullanma — yalnız yerdə olanda
   if ((keys['Space'] || touchJump) && grounded) {
     velocity.y = JUMP_SPEED;
   } else if (grounded && velocity.y < 0) {
-    // Blokla toqquşub yerdə olanda düşmə sürətini sıfırla
     velocity.y = 0;
   }
 
-  // Boşluğa düşübsə, təhlükəsiz nöqtəyə qaytar
   if (finalFeet.y < VOID_Y) {
     finalFeet = { ...RESPAWN_FEET };
     velocity.set(0, 0, 0);

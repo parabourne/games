@@ -36,30 +36,18 @@
         display: flex; align-items: center; justify-content: center;
         font-size: 22px;
         cursor: pointer;
+        position: relative;
       }
       .slot.active { border-color: white; background: rgba(255,255,255,0.2); }
-
-      /* ---- SAĞ YUXARI KÜNC: gündüz/gecə göstəricisi + inventar
-         eyni sütun konteynerində yerləşir ki, məzmun böyüdükcə
-         (çox məhsul toplananda) bir-birinin üstünə düşməsin. ---- */
-      #top-right-panel {
-        position: fixed; top: 10px; right: 10px;
-        display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
-        z-index: 30;
-        max-width: 240px;
-      }
-      #inventory-panel {
-        display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
-      }
-      #inventory-list {
-        display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end;
-        max-width: 220px;
-      }
-      .inv-chip {
-        background: rgba(0,0,0,0.55); color: white;
-        font-family: monospace; font-size: 14px;
-        padding: 4px 10px; border-radius: 6px;
-        border: 1px solid rgba(255,255,255,0.25);
+      .slot-icon { pointer-events: none; }
+      .slot-count {
+        position: absolute;
+        bottom: 2px; right: 4px;
+        font-size: 11px;
+        font-family: monospace;
+        color: white;
+        text-shadow: 1px 1px 1px rgba(0,0,0,0.9);
+        pointer-events: none;
       }
 
       /* ---- CRAFT (EMALAT) PANELİ ----
@@ -157,14 +145,6 @@
         z-index: 10;
       }
 
-      /* ---- GECƏ/GÜNDÜZ GÖSTƏRİCİSİ ----
-         Artıq #top-right-panel içində, sütun düzülüşündə olduğu üçün
-         ayrıca fixed mövqe lazım deyil — avtomatik yuxarıda yerləşir. ---- */
-      #daynight-indicator {
-        color: white; font-family: sans-serif; font-size: 14px;
-        background: rgba(0,0,0,0.55); padding: 6px 14px; border-radius: 6px;
-      }
-
       /* ---- MÜVƏQQƏTİ İPUCU MESAJI ---- */
       #hint {
         position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
@@ -226,24 +206,17 @@
 
     <div id="app"></div>
     <div id="crosshair"></div>
-    <div id="info">WASD - hərəkət | Space - tullanmaq | Sol klik - blok sındır / heyvana (zombiyə) vur | Sağ klik - blok qoy | Təkər - zoom | 1-5 - blok seç | B - yataq yanında yatmaq</div>
+    <div id="info">WASD - hərəkət | Space - tullanmaq | Sol klik - blok sındır / heyvana (zombiyə) vur | Sağ klik - blok qoy | Təkər - zoom | 1-6 - əşya seç | B - yataq yanında yatmaq</div>
 
     <div id="hint" class="hidden"></div>
 
-    <div id="top-right-panel">
-      <div id="daynight-indicator">☀️ Gündüz</div>
-      <div id="inventory-panel">
-        <div id="inventory-list"></div>
-      </div>
-    </div>
-
     <div id="hotbar">
-      <div class="slot active" data-type="grass">🟩</div>
-      <div class="slot" data-type="dirt">🟫</div>
-      <div class="slot" data-type="stone">⬜</div>
-      <div class="slot" data-type="wood">🪵</div>
-      <div class="slot" data-type="sand">🟨</div>
-      <div class="slot" data-type="bed">🛏️</div>
+      <div class="slot active"><span class="slot-icon"></span><span class="slot-count"></span></div>
+      <div class="slot"><span class="slot-icon"></span><span class="slot-count"></span></div>
+      <div class="slot"><span class="slot-icon"></span><span class="slot-count"></span></div>
+      <div class="slot"><span class="slot-icon"></span><span class="slot-count"></span></div>
+      <div class="slot"><span class="slot-icon"></span><span class="slot-count"></span></div>
+      <div class="slot"><span class="slot-icon"></span><span class="slot-count"></span></div>
     </div>
 
     <div id="craft-toggle-btn" title="Craft paneli (E)">🛠️</div>
