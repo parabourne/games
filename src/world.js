@@ -61,10 +61,15 @@ function geometryFor(type) {
 // ---------- DÜNYA ÖLÇÜSÜ ----------
 export const SIZE = 128;
 
-// Heyvanların (və digər səthdə gəzən varlıqların) təxmini spawn/yerdə
-// qalma hündürlüyü. Relyef 2-18 arası dəyişdiyi üçün bu tam dəqiq deyil,
-// amma ortalama bir səviyyədir (animals.js bunu istifadə edir).
+// DİQQƏT: Bu sabit köhnədir və yalnız uyğunluq üçün saxlanılıb.
+// Relyef təxminən -12 ilə 24 arasında dəyişir, ona görə sabit hündürlük
+// heyvanların havada qalmasına və ya yerə batmasına səbəb olur.
+// Əvəzinə getSurfaceY(x, z) istifadə et.
 export const GROUND_TOP = 7;
+
+// Səth axtarışı üçün hündürlük hədləri
+export const MAX_Y = 40;
+export const MIN_Y = -4;
 
 // ---------- BLOK SİSTEMİ (InstancedMesh) ----------
 const capacities = {
@@ -143,22 +148,58 @@ export function removeBlockByKey(k) {
   blocks.delete(k);
 }
 
+// ---------- SƏTH HÜNDÜRLÜYÜ (heyvanlar üçün) ----------
+// (x, z) nöqtəsindəki ən yuxarı bərk blokun ÜST səthinin Y koordinatını
+// qaytarır. Bloklar mərkəzdən çəkildiyi üçün blokun üstü y + 0.5-dir.
+// Heyvanın ayaq mövqeyini birbaşa bu dəyərə qoy (mərkəz üçün hündürlüyün
+// yarısını əlavə et).
+//
+//  fromY        - axtarışa başladığın hündürlük (default: dünyanın tavanı).
+//                 Heyvan hazırkı hündürlüyündən bir az yuxarıdan başlasa,
+//                 məsələn fromY = animal.y + 2, mağara tavanına düşməz.
+//  ignoreFoliage - true olanda ağac gövdəsi və yarpaqlar ötürülür.
+//
+// Blok tapılmasa null qaytarır (dünyanın kənarı / boşluq).
+export function getSurfaceY(x, z, fromY = MAX_Y, ignoreFoliage = true) {
+  const bx = Math.round(x);
+  const bz = Math.round(z);
+  const startY = Math.min(Math.round(fromY), MAX_Y);
+  for (let y = startY; y >= MIN_Y; y--) {
+    const b = blocks.get(key(bx, y, bz));
+    if (!b) continue;
+    if (ignoreFoliage && (b.type === 'leaves' || b.type === 'wood')) continue;
+    return y + 0.5;
+  }
+  return null;
+}
+
+// Verilmiş koordinatda bərk blok var?
+export function isSolid(x, y, z) {
+  return blocks.has(key(Math.round(x), Math.round(y), Math.round(z)));
+}
+
+// Nöqtə su səviyyəsindən aşağıdadırmı? (heyvanı sudan qaçırmaq üçün)
+export function isUnderwater(x, z) {
+  const y = getSurfaceY(x, z);
+  return y === null || y <= WATER_LEVEL + 0.5;
+}
+
 // ---------- DAĞLAR VƏ RELİYEF GENERASİYASI ----------
 // Sadə dalğa alqoritmi vasitəsilə dağlar/vadilər hesablanır
-function getTerrainHeight(x, z) {
+export function getTerrainHeight(x, z) {
   const scale1 = 0.03;
   const scale2 = 0.08;
-  
+
   const wave1 = Math.sin(x * scale1) * Math.cos(z * scale1) * 8;
   const wave2 = Math.sin(x * scale2 + 1.5) * Math.cos(z * scale2 + 1.5) * 4;
   const wave3 = Math.sin((x + z) * 0.02) * 6;
 
-  // Hündürlüyü 2 ilə 18 blok arasında təyin edirik
+  // Real aralıq təxminən -12 ilə 24 arasındadır
   return Math.floor(wave1 + wave2 + wave3 + 6);
 }
 
 const COAL_CHANCE = 0.08;
-const WATER_LEVEL = 2; // Su səviyyəsi
+export const WATER_LEVEL = 2; // Su səviyyəsi
 
 // Dünyanı yaratmaq
 for (let x = -SIZE / 2; x < SIZE / 2; x++) {
@@ -214,7 +255,7 @@ function generateTrees() {
       for (let lz = -2; lz <= 2; lz++) {
         for (let ly = trunkHeight - 1; ly <= trunkHeight + 1; ly++) {
           if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly !== trunkHeight) continue;
-          
+
           const leafY = groundHeight + ly;
           const targetKey = key(x + lx, leafY, z + lz);
           if (!blocks.has(targetKey)) {

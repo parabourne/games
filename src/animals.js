@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import { scene, GROUND_TOP, SIZE } from './world.js';
+import { scene, SIZE, WATER_LEVEL, getSurfaceY, isSolid } from './world.js';
 
 // ---------- HEYVANLAR ----------
+// Qeyd: hər heyvan qrupunun mənşəyi (origin) AYAQLARIN ALTINDADIR (y = 0),
+// ona görə mesh.position.y birbaşa yerin səth hündürlüyünə bərabər qoyulur.
 function createPig() {
   const group = new THREE.Group();
   const bodyMat = new THREE.MeshLambertMaterial({ color: 0xf5a9b8 });
@@ -123,10 +125,25 @@ function rollDrops(type) {
 
 export const animals = [];
 
+// ---------- YER HÜNDÜRLÜYÜ QAYDALARI ----------
+const MAX_STEP_UP = 1.01;   // heyvan maksimum 1 blok yuxarı çıxa bilər
+const MAX_STEP_DOWN = 3;    // 3 blokdan dərin çuxura getmir
+const GRAVITY = 20;
+
+// Nöqtə heyvan üçün yararlıdırmı (su deyil, boşluq deyil)?
+function isWalkableGround(groundY) {
+  return groundY !== null && groundY >= WATER_LEVEL + 0.5;
+}
+
+// YENİ: Spawn artıq real səth hündürlüyündən istifadə edir.
+// Uyğun yer tapılmasa (su/boşluq) false qaytarır.
 function spawnAnimal(type, x, z) {
+  const groundY = getSurfaceY(x, z);
+  if (!isWalkableGround(groundY)) return false;
+
   const builder = BUILDERS[type] || createPig;
   const mesh = builder();
-  mesh.position.set(x, GROUND_TOP, z);
+  mesh.position.set(x, groundY, z);
   mesh.rotation.y = Math.random() * Math.PI * 2;
   mesh.userData.isAnimal = true;
   scene.add(mesh);
@@ -138,10 +155,12 @@ function spawnAnimal(type, x, z) {
     state: 'idle',
     stateTimer: Math.random() * 2,
     walkAngle: Math.random() * Math.PI * 2,
+    vy: 0,
   };
   mesh.userData.animalRef = record;
 
   animals.push(record);
+  return true;
 }
 
 function randomSpawnPos() {
@@ -150,26 +169,28 @@ function randomSpawnPos() {
   return { x, z };
 }
 
+// Uyğun yer tapana qədər bir neçə dəfə cəhd edir.
+function spawnAnimalSomewhere(type, attempts = 30) {
+  for (let i = 0; i < attempts; i++) {
+    const { x, z } = randomSpawnPos();
+    if (spawnAnimal(type, x, z)) return true;
+  }
+  return false;
+}
+
 // ---------- İLK POPULYASİYA ----------
-// YENİ: Bu hədəf saylar həm başlanğıc doldurma, həm də sonrakı "respawn"
-// (bərpa) sistemi üçün istifadə olunur.
 const TARGET_COUNTS = { pig: 12, cow: 10, sheep: 10 };
 
 for (const [type, count] of Object.entries(TARGET_COUNTS)) {
   for (let i = 0; i < count; i++) {
-    const { x, z } = randomSpawnPos();
-    spawnAnimal(type, x, z);
+    spawnAnimalSomewhere(type);
   }
 }
 
 const ANIMAL_SPEED = 1.2;
 const WORLD_HALF = SIZE / 2 - 0.6;
 
-// ---------- YENİ: HEYVAN RESPAWN (BƏRPA) SİSTEMİ ----------
-// Bütün heyvanları öldürüb "dünya boşalanda" yeni heyvan gəlmirdi.
-// İndi hər RESPAWN_INTERVAL saniyədən bir, hər növün sayı öz hədəfindən
-// (TARGET_COUNTS) az olduğu halda TƏK bir yeni heyvan doğulur — beləliklə
-// populyasiya tamamilə tükənmir, amma partlayış şəklində gəlmir.
+// ---------- HEYVAN RESPAWN (BƏRPA) SİSTEMİ ----------
 const RESPAWN_INTERVAL = 8; // saniyə
 let respawnTimer = RESPAWN_INTERVAL;
 
@@ -177,11 +198,8 @@ function tryRespawn() {
   for (const [type, target] of Object.entries(TARGET_COUNTS)) {
     const current = animals.filter((a) => a.type === type).length;
     if (current < target) {
-      const { x, z } = randomSpawnPos();
-      spawnAnimal(type, x, z);
-      // Frame başına bütün növləri eyni anda doldurmuruq —
-      // hər çağırışda maksimum 1 heyvan əlavə olunur ki, tədricən dolsun.
-      break;
+      spawnAnimalSomewhere(type);
+      break; // hər çağırışda maksimum 1 heyvan
     }
   }
 }
@@ -194,6 +212,8 @@ export function updateAnimals(dt) {
   }
 
   for (const a of animals) {
+    const p = a.mesh.position;
+
     a.stateTimer -= dt;
     if (a.stateTimer <= 0) {
       if (a.state === 'idle') {
@@ -207,21 +227,52 @@ export function updateAnimals(dt) {
     }
 
     if (a.state === 'walk') {
-      const dx = Math.sin(a.walkAngle) * ANIMAL_SPEED * dt;
-      const dz = Math.cos(a.walkAngle) * ANIMAL_SPEED * dt;
-      let nx = a.mesh.position.x + dx;
-      let nz = a.mesh.position.z + dz;
+      const nx = p.x + Math.sin(a.walkAngle) * ANIMAL_SPEED * dt;
+      const nz = p.z + Math.cos(a.walkAngle) * ANIMAL_SPEED * dt;
+
+      let blocked = false;
 
       if (nx > WORLD_HALF || nx < -WORLD_HALF || nz > WORLD_HALF || nz < -WORLD_HALF) {
-        a.walkAngle += Math.PI;
+        blocked = true;
       } else {
-        a.mesh.position.x = nx;
-        a.mesh.position.z = nz;
+        // Hədəf nöqtənin yerini yoxla (cari hündürlükdən 1.5 yuxarıdan başla)
+        const targetY = getSurfaceY(nx, nz, p.y + 1.5);
+
+        if (!isWalkableGround(targetY)) {
+          blocked = true;                                  // su və ya boşluq
+        } else if (targetY - p.y > MAX_STEP_UP) {
+          blocked = true;                                  // çox hündür divar
+        } else if (p.y - targetY > MAX_STEP_DOWN) {
+          blocked = true;                                  // çox dərin çuxur
+        } else if (isSolid(nx, targetY + 0.5, nz)) {
+          blocked = true;                                  // ağac gövdəsi / yarpaq
+        }
+      }
+
+      if (blocked) {
+        a.walkAngle += Math.PI / 2 + Math.random() * Math.PI; // başqa istiqamətə dön
+      } else {
+        p.x = nx;
+        p.z = nz;
       }
       a.mesh.rotation.y = -a.walkAngle + Math.PI / 2;
     }
 
-    a.mesh.position.y = GROUND_TOP;
+    // ---------- YENİ: Həqiqi yerə oturma (cazibə + pilləkən) ----------
+    const groundY = getSurfaceY(p.x, p.z, p.y + 1.5);
+    if (groundY !== null) {
+      if (p.y > groundY + 0.001) {
+        // Havadadır (məs. altındakı blok qırılıb) -> düşür
+        a.vy -= GRAVITY * dt;
+        p.y = Math.max(groundY, p.y + a.vy * dt);
+        if (p.y === groundY) a.vy = 0;
+      } else {
+        // Yer yuxarıdadır (pillə) -> hamar qalxır
+        a.vy = 0;
+        const diff = groundY - p.y;
+        p.y = diff < 0.05 ? groundY : p.y + diff * Math.min(1, dt * 15);
+      }
+    }
   }
 }
 
